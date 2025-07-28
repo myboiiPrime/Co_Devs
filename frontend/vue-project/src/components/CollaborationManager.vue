@@ -212,13 +212,35 @@
       <!-- Editor Area -->
       <div class="editor-area">
         <div class="editor-tabs">
-          <div class="tab active">
+          <div 
+            v-if="selectedFile"
+            class="tab"
+            :class="{ active: activeTab === 'editor' }"
+            @click="setActiveTab('editor')"
+          >
+            <span class="tab-label">{{ selectedFile.name }}</span>
+            <button class="tab-close" @click.stop="closeFile">×</button>
+          </div>
+          <div 
+            class="tab"
+            :class="{ active: activeTab === 'terminal' }"
+            @click="setActiveTab('terminal')"
+          >
             <span class="tab-label">Terminal</span>
-            <button class="tab-close">×</button>
           </div>
         </div>
         <div class="editor-content">
+          <CodeEditor 
+            v-if="selectedFile && activeTab === 'editor'"
+            v-model="fileContent"
+            :language="getFileLanguage(selectedFile.name)"
+            :documentId="selectedFile.path"
+            @change="handleFileContentChange"
+            @ai-request="handleAiRequest"
+            class="code-editor-component"
+          />
           <Terminal 
+            v-if="activeTab === 'terminal'"
             :sessionId="sessionId"
             :socket="socket"
             @error="handleError"
@@ -273,13 +295,15 @@
 <script>
 import Terminal from './Terminal.vue'
 import FileTree from './FileTree.vue'
+import CodeEditor from './CodeEditor.vue'
 import { buildApiUrl } from '@/config/api.js'
 
 export default {
   name: 'CollaborationManager',
   components: {
     Terminal,
-    FileTree
+    FileTree,
+    CodeEditor
   },
   props: {
     sessionId: {
@@ -301,6 +325,8 @@ export default {
       participants: [],
       notifications: [],
       selectedFile: null,
+      fileContent: '',
+      activeTab: 'terminal',
       activeView: 'explorer',
       sidebarVisible: true,
       newUsername: '',
@@ -365,6 +391,8 @@ export default {
       this.socket.on('user-left-session', this.handleUserLeft)
       this.socket.on('session-updated', this.handleSessionUpdated)
       this.socket.on('collaboration-notification', this.handleCollaborationNotification)
+      this.socket.on('fs-read-result', this.handleFileReadResult)
+      this.socket.on('fs-write-result', this.handleFileWriteResult)
     },
 
     joinSession() {
@@ -421,9 +449,101 @@ export default {
       this.addNotification(data)
     },
 
+    handleFileReadResult(result) {
+      if (result.success) {
+        this.fileContent = result.content
+      } else {
+        this.addNotification({
+          type: 'error',
+          message: `Failed to read file: ${result.error}`
+        })
+      }
+    },
+
+    handleFileWriteResult(result) {
+      if (!result.success) {
+        this.addNotification({
+          type: 'error',
+          message: `Failed to save file: ${result.error}`
+        })
+      }
+    },
+
     handleFileSelected(file) {
       this.selectedFile = file
+      this.activeTab = 'editor'
+      this.loadFileContent(file)
       this.$emit('file-selected', file)
+    },
+
+    async loadFileContent(file) {
+      try {
+        // Request file content from server
+        this.socket.emit('fs-read', {
+          sessionId: this.sessionId,
+          path: file.path
+        })
+      } catch (error) {
+        console.error('Error loading file:', error)
+        this.addNotification({
+          type: 'error',
+          message: `Failed to load file: ${file.name}`
+        })
+      }
+    },
+
+    handleFileContentChange(content) {
+      this.fileContent = content
+      // Save file content to server
+      this.socket.emit('fs-write', {
+        sessionId: this.sessionId,
+        path: this.selectedFile.path,
+        content: content
+      })
+    },
+
+    setActiveTab(tab) {
+      this.activeTab = tab
+    },
+
+    closeFile() {
+      this.selectedFile = null
+      this.fileContent = ''
+      this.activeTab = 'terminal'
+    },
+
+    getFileLanguage(filename) {
+      const ext = filename.split('.').pop()?.toLowerCase()
+      const languageMap = {
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'cpp',
+        'h': 'cpp',
+        'hpp': 'cpp',
+        'html': 'html',
+        'htm': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'sass': 'sass',
+        'json': 'json',
+        'xml': 'xml',
+        'md': 'markdown',
+        'txt': 'plaintext'
+      }
+      return languageMap[ext] || 'plaintext'
+    },
+
+    handleAiRequest(request) {
+      // Handle AI requests from the code editor
+      this.addNotification({
+        type: 'info',
+        message: `AI ${request.action} request: ${request.selectedText.substring(0, 50)}...`
+      })
     },
 
     handleNotification(notification) {

@@ -1,5 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
 const CollaborationSession = require('../models/CollaborationSession');
 const Document = require('../models/Document');
 const User = require('../models/User');
@@ -8,6 +9,117 @@ const terminalService = require('../services/terminalService');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
+
+// Generate JWT token
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || '7d'
+  });
+};
+
+// Create new collaboration session (no JWT required)
+router.post('/create', async (req, res) => {
+  try {
+    const { username, sessionName } = req.body;
+    
+    if (!username || username.trim() === '') {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    // Find or create user record
+    let user = await User.findOne({ username: username.trim() });
+    if (!user) {
+      // Create a temporary user record for this session
+      user = new User({
+        username: username.trim(),
+        email: `${username.trim()}@temp.com`,
+        password: 'temppass123', // Changed to meet 6+ character requirement
+        isTemporary: true
+      });
+      await user.save();
+    }
+
+    // Generate unique session ID
+    const sessionId = uuidv4();
+
+    // Create a default document for the session
+    const document = new Document({
+      title: sessionName || 'Collaborative Session',
+      content: `// Welcome to ${sessionName || 'your collaborative session'}!
+// This is a shared workspace where multiple users can code together.
+
+console.log('Hello from the collaborative session!');
+
+// You can write code here and see real-time changes from other users
+function welcomeMessage() {
+  return 'Welcome to collaborative coding with Co-Devs!';
+}
+
+// Try editing this file with multiple users to see the magic happen!
+// Use the terminal below to run your code and see the results.
+
+welcomeMessage();
+`,
+      language: 'javascript',
+      owner: user._id,
+      collaborators: [user._id],
+      isPublic: false
+    });
+    await document.save();
+
+    // Create isolated workspace
+    const workspaceDir = await workspaceService.createCollaborationWorkspace(
+      sessionId, 
+      document.content, 
+      document.language
+    );
+
+    // Create the collaboration session
+    const session = new CollaborationSession({
+      sessionId: sessionId,
+      name: sessionName || 'Collaborative Session',
+      description: `A collaborative coding session created by ${username}`,
+      owner: user._id,
+      participants: [{
+        user: user._id,
+        role: 'owner',
+        joinedAt: new Date()
+      }],
+      documentId: document._id,
+      workspaceDir: workspaceDir, // Added missing workspaceDir field
+      isActive: true,
+      settings: {
+        maxParticipants: 10,
+        allowAnonymous: true,
+        permissions: {
+          canEdit: true,
+          canExecute: true,
+          canManageFiles: true
+        }
+      },
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+    });
+
+    await session.save();
+
+    // Generate JWT token for socket authentication
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      message: 'Session created successfully',
+      sessionId: sessionId,
+      sessionName: sessionName || 'Collaborative Session',
+      owner: username,
+      token, // Add token for socket authentication
+      workspaceCreated: !!workspaceDir
+    });
+
+  } catch (error) {
+    console.error('Create session error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create session' });
+  }
+});
 
 // Simple username-based session join (no JWT required)
 router.post('/:sessionId/join-simple', async (req, res) => {
@@ -54,18 +166,22 @@ router.post('/:sessionId/join-simple', async (req, res) => {
       // Create a temporary user record for this session
       user = new User({
         username,
-        email: `${username}@temp.local`,
-        password: 'temp', // This won't be used for login
+        email: `${username}@temp.com`,
+        password: 'temppass123', // Changed to meet 6+ character requirement
         isTemporary: true
       });
       await user.save();
     }
+
+    // Generate JWT token for socket authentication
+    const token = generateToken(user._id);
 
     res.json({
       message: 'Successfully joined collaboration session',
       sessionId: session.sessionId,
       username,
       isOwner,
+      token, // Add token for socket authentication
       sessionInfo: {
         title: session.documentId?.title || 'Untitled',
         owner: session.owner.username,
@@ -127,14 +243,14 @@ router.post('/:sessionId/add-user', async (req, res) => {
 
     // Verify the requester is the session owner
     if (session.owner.username !== ownerUsername) {
-      return res.status(403).json({ error: 'Only session owner can add users' });
+      return res.status(403).json({ error: 'Only session owner can remove users' });
     }
 
     // Check if user already exists in session
     const existingParticipant = session.participants.find(p => 
       p.user.username === username
     );
-
+    
     if (existingParticipant) {
       return res.status(400).json({ error: 'User is already in the session' });
     }
@@ -145,7 +261,7 @@ router.post('/:sessionId/add-user', async (req, res) => {
       user = new User({
         username,
         email: `${username}@temp.local`,
-        password: 'temp',
+        password: 'temppass123', // Fixed: Changed to meet 6+ character requirement
         isTemporary: true
       });
       await user.save();
@@ -220,66 +336,6 @@ router.post('/:sessionId/remove-user', async (req, res) => {
     });
   } catch (error) {
     console.error('Remove user from session error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Create new collaboration session
-router.post('/create', auth, async (req, res) => {
-  try {
-    const { documentId, settings = {} } = req.body;
-    
-    // Verify document exists and user has access
-    const document = await Document.findById(documentId);
-    if (!document) {
-      return res.status(404).json({ error: 'Document not found' });
-    }
-
-    // Check if user has access to the document
-    const hasAccess = document.owner.toString() === req.user.userId ||
-                     document.collaborators.some(collab => collab.user.toString() === req.user.userId) ||
-                     document.isPublic;
-
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const sessionId = uuidv4();
-    
-    // Create isolated workspace
-    const workspaceDir = await workspaceService.createCollaborationWorkspace(
-      sessionId, 
-      document.content, 
-      document.language
-    );
-    
-    // Default settings
-    const defaultSettings = {
-      maxTerminals: 5,
-      allowedShells: ['bash', 'cmd', 'powershell', 'python', 'node'],
-      fileSystemAccess: true,
-      ...settings
-    };
-
-    const session = new CollaborationSession({
-      sessionId,
-      documentId,
-      owner: req.user.userId,
-      workspaceDir,
-      settings: defaultSettings,
-      participants: [{ user: req.user.userId, role: 'owner' }]
-    });
-
-    await session.save();
-    
-    res.json({
-      sessionId,
-      workspaceDir,
-      settings: defaultSettings,
-      message: 'Collaboration session created successfully'
-    });
-  } catch (error) {
-    console.error('Create collaboration session error:', error);
     res.status(500).json({ error: error.message });
   }
 });

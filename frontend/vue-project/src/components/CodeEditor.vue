@@ -30,7 +30,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import * as monaco from 'monaco-editor'
+import loader from '@monaco-editor/loader'
 
 const props = defineProps({
   modelValue: {
@@ -51,7 +51,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'change', 'cursor-change', 'selection-change'])
+const emit = defineEmits(['update:modelValue', 'change', 'cursor-change', 'selection-change', 'ai-request'])
 
 const editorContainer = ref(null)
 const selectedLanguage = ref(props.language)
@@ -60,6 +60,7 @@ const selectedText = ref('')
 const selectionRange = ref(null)
 
 let editor = null
+let monaco = null
 
 const selectionInfo = computed(() => {
   if (!hasSelection.value) return ''
@@ -86,65 +87,72 @@ watch(() => props.modelValue, (newValue) => {
 
 watch(() => props.language, (newLanguage) => {
   selectedLanguage.value = newLanguage
-  if (editor) {
+  if (editor && monaco) {
     monaco.editor.setModelLanguage(editor.getModel(), newLanguage)
   }
 })
 
-const initializeEditor = () => {
+const initializeEditor = async () => {
   if (!editorContainer.value) return
 
-  editor = monaco.editor.create(editorContainer.value, {
-    value: props.modelValue || '',
-    language: selectedLanguage.value,
-    theme: 'vs-dark',
-    readOnly: props.readOnly,
-    automaticLayout: true,
-    fontSize: 14,
-    minimap: { enabled: true },
-    scrollBeyondLastLine: false,
-    wordWrap: 'on',
-    lineNumbers: 'on',
-    folding: true,
-    selectOnLineNumbers: true,
-    matchBrackets: 'always',
-    autoIndent: 'full',
-    formatOnPaste: true,
-    formatOnType: true
-  })
-
-  // Listen for content changes
-  editor.onDidChangeModelContent(() => {
-    const value = editor.getValue()
-    emit('update:modelValue', value)
-    emit('change', value)
-  })
-
-  // Listen for cursor position changes
-  editor.onDidChangeCursorPosition((e) => {
-    emit('cursor-change', {
-      lineNumber: e.position.lineNumber,
-      column: e.position.column
-    })
-  })
-
-  // Listen for selection changes
-  editor.onDidChangeCursorSelection((e) => {
-    const selection = editor.getSelection()
-    const selectedContent = editor.getModel().getValueInRange(selection)
-    hasSelection.value = selectedContent.length > 0
-    selectedText.value = selectedContent
-    selectionRange.value = selection
+  try {
+    // Load Monaco Editor
+    monaco = await loader.init()
     
-    emit('selection-change', {
-      hasSelection: hasSelection.value,
-      selectedText: selectedContent,
-      range: selection
+    editor = monaco.editor.create(editorContainer.value, {
+      value: props.modelValue || '',
+      language: selectedLanguage.value,
+      theme: 'vs-dark',
+      readOnly: props.readOnly,
+      automaticLayout: true,
+      fontSize: 14,
+      minimap: { enabled: true },
+      scrollBeyondLastLine: false,
+      wordWrap: 'on',
+      lineNumbers: 'on',
+      folding: true,
+      selectOnLineNumbers: true,
+      matchBrackets: 'always',
+      autoIndent: 'full',
+      formatOnPaste: true,
+      formatOnType: true
     })
-  })
 
-  // Setup context menu
-  setupContextMenu()
+    // Listen for content changes
+    editor.onDidChangeModelContent(() => {
+      const value = editor.getValue()
+      emit('update:modelValue', value)
+      emit('change', value)
+    })
+
+    // Listen for cursor position changes
+    editor.onDidChangeCursorPosition((e) => {
+      emit('cursor-change', {
+        lineNumber: e.position.lineNumber,
+        column: e.position.column
+      })
+    })
+
+    // Listen for selection changes
+    editor.onDidChangeCursorSelection((e) => {
+      const selection = editor.getSelection()
+      const selectedContent = editor.getModel().getValueInRange(selection)
+      hasSelection.value = selectedContent.length > 0
+      selectedText.value = selectedContent
+      selectionRange.value = selection
+      
+      emit('selection-change', {
+        hasSelection: hasSelection.value,
+        selectedText: selectedContent,
+        range: selection
+      })
+    })
+
+    // Setup context menu
+    setupContextMenu()
+  } catch (error) {
+    console.error('Failed to initialize Monaco Editor:', error)
+  }
 }
 
 const setupContextMenu = () => {
@@ -175,7 +183,7 @@ const setupContextMenu = () => {
 }
 
 const changeLanguage = () => {
-  if (editor) {
+  if (editor && monaco) {
     monaco.editor.setModelLanguage(editor.getModel(), selectedLanguage.value)
   }
 }

@@ -21,16 +21,12 @@
         <!-- Left Side - Content (40%) -->
         <div class="hero-text">
           <h1 class="hero-heading">
-            The Future of 
-            <span class="text-gradient">Collaborative Development</span>
+            Code Together, <span class="text-gradient">Build Better</span>
           </h1>
-          <p class="hero-subtext">
-            Build, code, and collaborate in real-time with your team. 
-            Our powerful IDE brings VS Code's familiar interface to the web 
-            with seamless collaboration features.
+          <p class="hero-description">
+            Real-time collaborative IDE that brings your team together. Write, debug, and deploy code simultaneously with powerful AI assistance.
           </p>
-
-          <div class="hero-cta">
+          <div class="hero-buttons">
             <button @click="startCollaboration" class="btn btn-primary-large">
               <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
@@ -55,18 +51,17 @@
                 <span class="control minimize"></span>
                 <span class="control maximize"></span>
               </div>
-              <div class="window-title">Co-Devs - main.js</div>
-              <div class="window-actions">
-                <span class="live-indicator">● Live</span>
-              </div>
+              <div class="window-title">Co-Devs - Collaborative IDE</div>
             </div>
             
-            <div class="ide-interface">
+            <div class="ide-content">
               <!-- Activity Bar -->
               <div class="activity-bar">
                 <div class="activity-icon active">📁</div>
                 <div class="activity-icon">🔍</div>
-                <div class="activity-icon">🔧</div>
+                <div class="activity-icon">🌿</div>
+                <div class="activity-icon">🐛</div>
+                <div class="activity-icon">📦</div>
                 <div class="activity-icon">👥</div>
               </div>
               
@@ -84,8 +79,8 @@
               <!-- Editor Area -->
               <div class="editor-area">
                 <div class="editor-tabs">
-                  <div class="tab active">main.js ×</div>
-                  <div class="tab">utils.js ×</div>
+                  <div class="tab active">main.js</div>
+                  <div class="tab">utils.js</div>
                 </div>
                 <div class="code-editor">
                   <div class="code-line">
@@ -100,7 +95,7 @@
                     <span class="line-num">3</span>
                     <span class="code"></span>
                   </div>
-                  <div class="code-line">
+                  <div class="code-line active">
                     <span class="line-num">4</span>
                     <span class="code">const app = createApp(App)</span>
                     <span class="cursor-indicator">|</span>
@@ -122,6 +117,7 @@
               <div class="status-right">
                 <span class="status-item">JavaScript</span>
                 <span class="status-item">UTF-8</span>
+                <span class="status-item">Ln 4, Col 25</span>
               </div>
             </div>
           </div>
@@ -129,50 +125,51 @@
       </div>
     </section>
 
-    <!-- Features Section - Desktop Grid -->
+    <!-- Features Section -->
     <section id="features" class="features-desktop">
-      <div class="features-wrapper">
+      <div class="features-container">
         <div class="section-header">
-          <h2 class="section-title">Everything You Need for Team Development</h2>
+          <h2 class="section-title">Powerful Features for Modern Development</h2>
           <p class="section-subtitle">
-            Powerful features designed for modern development teams
+            Everything you need for seamless team collaboration
           </p>
         </div>
         
-        <div class="features-grid-desktop">
-          <div class="feature-large">
-            <div class="feature-content">
-              <h3>Real-Time Collaboration</h3>
-              <p>See your teammates' cursors, edits, and selections in real-time. No more merge conflicts or version control headaches.</p>
-              <ul class="feature-list">
-                <li>Live cursor tracking</li>
-                <li>Instant synchronization</li>
-                <li>Conflict-free editing</li>
-                <li>User presence indicators</li>
-              </ul>
-            </div>
-            <div class="feature-visual">
-              <div class="collaboration-demo">
-              </div>
-            </div>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Real-time Collaboration</h3>
+            <p>See changes instantly as your team codes together. No more merge conflicts or version control headaches.</p>
           </div>
-
-          <div class="feature-row">
-            <div class="feature-card">
-              <div class="feature-icon">💻</div>
-              <h4>Integrated Terminal</h4>
-              <p>Full-featured terminal with support for multiple shells and command execution.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon">📁</div>
-              <h4>File Management</h4>
-              <p>Complete file explorer with drag-and-drop, search, and project organization.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon">🔒</div>
-              <h4>Secure Sessions</h4>
-              <p>Enterprise-grade security with encrypted connections and access controls.</p>
-            </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <h3>AI-Powered Assistant</h3>
+            <p>Get intelligent code suggestions, explanations, and optimizations powered by advanced AI.</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">🔧</div>
+            <h3>Integrated Terminal</h3>
+            <p>Run commands, manage dependencies, and deploy directly from your collaborative environment.</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">📁</div>
+            <h3>Smart File Management</h3>
+            <p>Organize, share, and manage project files with intelligent auto-sync across all team members.</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <h3>Multi-Language Support</h3>
+            <p>Work with JavaScript, Python, Java, C++, and more with syntax highlighting and IntelliSense.</p>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>Secure & Private</h3>
+            <p>Enterprise-grade security with encrypted connections and private workspace management.</p>
           </div>
         </div>
       </div>
@@ -196,25 +193,40 @@
                   <path d="M8 5v14l11-7z"/>
                 </svg>
               </div>
-              <div class="video-overlay">
-                <h3>Live Collaboration Demo</h3>
-                <p>3:42 minutes</p>
+            </div>
+          </div>
+          
+          <div class="demo-features">
+            <div class="demo-feature">
+              <div class="demo-feature-icon">👥</div>
+              <div class="demo-feature-text">
+                <h4>Multiple Cursors</h4>
+                <p>See where everyone is working in real-time</p>
+              </div>
+            </div>
+            
+            <div class="demo-feature">
+              <div class="demo-feature-icon">💬</div>
+              <div class="demo-feature-text">
+                <h4>Live Chat</h4>
+                <p>Communicate without leaving your code</p>
+              </div>
+            </div>
+            
+            <div class="demo-feature">
+              <div class="demo-feature-icon">🔄</div>
+              <div class="demo-feature-text">
+                <h4>Auto-Sync</h4>
+                <p>Changes are saved and synced automatically</p>
               </div>
             </div>
           </div>
-          <div class="demo-features">
-            <h3>What you'll see:</h3>
-            <ul class="demo-list">
-              <li>Real-time code editing with multiple users</li>
-              <li>Live cursor tracking and user presence</li>
-              <li>Integrated terminal collaboration</li>
-              <li>File sharing and project management</li>
-              <li>Voice chat integration</li>
-            </ul>
-            <button @click="startCollaboration" class="btn btn-primary-large demo-cta">
-              Try It Yourself
-            </button>
-          </div>
+        </div>
+        
+        <div class="demo-cta">
+          <button @click="startCollaboration" class="btn btn-primary-large demo-cta">
+            Try It Now - It's Free!
+          </button>
         </div>
       </div>
     </section>
@@ -235,16 +247,59 @@
       </div>
     </section>
 
+    <!-- Create Session Modal -->
+    <div v-if="showCreateModal" class="modal-overlay" @click="closeCreateModal">
+      <div class="modal-desktop" @click.stop>
+        <div class="modal-header">
+          <h3>Create New Session</h3>
+          <button @click="closeCreateModal" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="createErrorMessage" class="error-message">
+            {{ createErrorMessage }}
+          </div>
+          <div class="input-group">
+            <label for="createUsername">Your Username</label>
+            <input 
+              v-model="createUsername" 
+              type="text" 
+              id="createUsername" 
+              placeholder="Enter your username"
+              class="modal-input"
+              :disabled="isCreatingSession"
+            >
+          </div>
+          <div class="input-group">
+            <label for="sessionName">Session Name (Optional)</label>
+            <input 
+              v-model="sessionName" 
+              type="text" 
+              id="sessionName" 
+              placeholder="e.g., Team Project, Code Review Session"
+              class="modal-input"
+              :disabled="isCreatingSession"
+            >
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="closeCreateModal" class="btn btn-secondary" :disabled="isCreatingSession">Cancel</button>
+          <button @click="createNewSession" class="btn btn-primary" :disabled="isCreatingSession">
+            {{ isCreatingSession ? 'Creating...' : 'Create Session' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Session Join Modal -->
-    <div v-if="showJoinModal" class="modal-overlay" @click="closeModal">
+    <div v-if="showJoinModal" class="modal-overlay" @click="closeJoinModal">
       <div class="modal-desktop" @click.stop>
         <div class="modal-header">
           <h3>Join Collaboration Session</h3>
-          <button @click="closeModal" class="modal-close">×</button>
+          <button @click="closeJoinModal" class="modal-close">×</button>
         </div>
         <div class="modal-body">
-          <div v-if="errorMessage" class="error-message">
-            {{ errorMessage }}
+          <div v-if="joinErrorMessage" class="error-message">
+            {{ joinErrorMessage }}
           </div>
           <div class="input-group">
             <label for="sessionId">Session ID</label>
@@ -254,25 +309,25 @@
               id="sessionId" 
               placeholder="Enter session ID (e.g., f3d18d9d-a64c-4bba-aa3d-3844a43fde29)"
               class="modal-input"
-              :disabled="isLoading"
+              :disabled="isJoiningSession"
             >
           </div>
           <div class="input-group">
-            <label for="username">Your Username</label>
+            <label for="joinUsername">Your Username</label>
             <input 
-              v-model="username" 
+              v-model="joinUsername" 
               type="text" 
-              id="username" 
+              id="joinUsername" 
               placeholder="Enter your username"
               class="modal-input"
-              :disabled="isLoading"
+              :disabled="isJoiningSession"
             >
           </div>
         </div>
         <div class="modal-footer">
-          <button @click="closeModal" class="btn btn-secondary" :disabled="isLoading">Cancel</button>
-          <button @click="joinSessionWithId" class="btn btn-primary" :disabled="isLoading">
-            {{ isLoading ? 'Joining...' : 'Join Session' }}
+          <button @click="closeJoinModal" class="btn btn-secondary" :disabled="isJoiningSession">Cancel</button>
+          <button @click="joinSessionWithId" class="btn btn-primary" :disabled="isJoiningSession">
+            {{ isJoiningSession ? 'Joining...' : 'Join Session' }}
           </button>
         </div>
       </div>
@@ -286,35 +341,105 @@ import { useRouter } from 'vue-router'
 import { apiConfig, buildApiUrl } from '@/config/api.js'
 
 const router = useRouter()
+
+// Create Session Modal
+const showCreateModal = ref(false)
+const createUsername = ref('')
+const sessionName = ref('')
+const createErrorMessage = ref('')
+const isCreatingSession = ref(false)
+
+// Join Session Modal
 const showJoinModal = ref(false)
 const joinSessionId = ref('')
-const username = ref('')
-const errorMessage = ref('')
-const isLoading = ref(false)
+const joinUsername = ref('')
+const joinErrorMessage = ref('')
+const isJoiningSession = ref(false)
 
+// Create new session function
 const startCollaboration = () => {
-  const sessionId = 'session-' + Math.random().toString(36).substr(2, 9)
-  router.push({ name: 'ide', query: { session: sessionId } })
+  showCreateModal.value = true
+  createErrorMessage.value = ''
 }
 
+const createNewSession = async () => {
+  if (!createUsername.value.trim()) {
+    createErrorMessage.value = 'Please enter your username'
+    return
+  }
+
+  isCreatingSession.value = true
+  createErrorMessage.value = ''
+
+  try {
+    // Call backend to create a new session
+    const response = await fetch(buildApiUrl('/api/collaboration/create'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: createUsername.value.trim(),
+        sessionName: sessionName.value.trim() || 'Collaborative Session'
+      })
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to create session')
+    }
+
+    // Store the JWT token for socket authentication
+    if (result.token) {
+      localStorage.setItem('token', result.token)
+    }
+
+    // Successfully created, navigate to IDE
+    router.push({ 
+      name: 'ide', 
+      query: { 
+        session: result.sessionId,
+        username: createUsername.value.trim()
+      } 
+    })
+    
+    closeCreateModal()
+  } catch (error) {
+    console.error('Create session error:', error)
+    createErrorMessage.value = error.message || 'Failed to create session. Please try again.'
+  } finally {
+    isCreatingSession.value = false
+  }
+}
+
+const closeCreateModal = () => {
+  showCreateModal.value = false
+  createUsername.value = ''
+  sessionName.value = ''
+  createErrorMessage.value = ''
+  isCreatingSession.value = false
+}
+
+// Join session functions
 const joinSession = () => {
   showJoinModal.value = true
-  errorMessage.value = ''
+  joinErrorMessage.value = ''
 }
 
 const joinSessionWithId = async () => {
   if (!joinSessionId.value.trim()) {
-    errorMessage.value = 'Please enter a session ID'
+    joinErrorMessage.value = 'Please enter a session ID'
     return
   }
   
-  if (!username.value.trim()) {
-    errorMessage.value = 'Please enter your username'
+  if (!joinUsername.value.trim()) {
+    joinErrorMessage.value = 'Please enter your username'
     return
   }
 
-  isLoading.value = true
-  errorMessage.value = ''
+  isJoiningSession.value = true
+  joinErrorMessage.value = ''
 
   try {
     // First, get session info to verify it exists
@@ -333,7 +458,7 @@ const joinSessionWithId = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        username: username.value.trim()
+        username: joinUsername.value.trim()
       })
     })
 
@@ -341,10 +466,15 @@ const joinSessionWithId = async () => {
 
     if (!joinResponse.ok) {
       if (joinResponse.status === 403) {
-        errorMessage.value = `Access denied. You are not authorized to join this session. Owner: ${sessionInfo.owner}`
+        joinErrorMessage.value = `Access denied. You are not authorized to join this session. Owner: ${sessionInfo.owner}`
         return
       }
       throw new Error(result.error || 'Failed to join session')
+    }
+
+    // Store the JWT token for socket authentication
+    if (result.token) {
+      localStorage.setItem('token', result.token)
     }
 
     // Successfully joined, navigate to IDE
@@ -352,27 +482,28 @@ const joinSessionWithId = async () => {
       name: 'ide', 
       query: { 
         session: joinSessionId.value.trim(),
-        username: username.value.trim()
+        username: joinUsername.value.trim()
       } 
     })
     
-    closeModal()
+    closeJoinModal()
   } catch (error) {
     console.error('Join session error:', error)
-    errorMessage.value = error.message || 'Failed to join session. Please check the session ID and try again.'
+    joinErrorMessage.value = error.message || 'Failed to join session. Please check the session ID and try again.'
   } finally {
-    isLoading.value = false
+    isJoiningSession.value = false
   }
 }
 
-const closeModal = () => {
+const closeJoinModal = () => {
   showJoinModal.value = false
   joinSessionId.value = ''
-  username.value = ''
-  errorMessage.value = ''
-  isLoading.value = false
+  joinUsername.value = ''
+  joinErrorMessage.value = ''
+  isJoiningSession.value = false
 }
 
+// Other functions
 const goToHome = () => {
   // If we're already on home page, just scroll to top
   if (router.currentRoute.value.name === 'home' || router.currentRoute.value.path === '/') {
@@ -387,7 +518,7 @@ const scrollToFeatures = () => {
 }
 
 const playDemo = () => {
-  // For now, just start a collaboration session as demo
+  // For demo, just start a collaboration session
   startCollaboration()
 }
 </script>
@@ -499,14 +630,14 @@ html {
   background-clip: text;
 }
 
-.hero-subtext {
+.hero-description {
   font-size: 1.25rem;
   line-height: 1.6;
   margin-bottom: 3rem;
   opacity: 0.9;
 }
 
-.hero-cta {
+.hero-buttons {
   display: flex;
   gap: 1rem;
 }
@@ -561,7 +692,7 @@ html {
   font-weight: 600;
 }
 
-.ide-interface {
+.ide-content {
   display: flex;
   height: 400px;
 }
@@ -709,7 +840,7 @@ html {
   overflow-y: auto;
 }
 
-.features-wrapper {
+.features-container {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 2rem;
@@ -734,59 +865,15 @@ html {
   margin: 0 auto;
 }
 
-.features-grid-desktop {
+.features-grid {
   display: flex;
   flex-direction: column;
   gap: 3rem;
 }
 
-.feature-large {
+.features-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4rem;
-  align-items: center;
-  background: white;
-  padding: 3rem;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.feature-content h3 {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 1rem;
-}
-
-.feature-content p {
-  font-size: 1.1rem;
-  color: #64748b;
-  margin-bottom: 1.5rem;
-}
-
-.feature-list {
-  list-style: none;
-  padding: 0;
-}
-
-.feature-list li {
-  padding: 0.5rem 0;
-  color: #475569;
-  position: relative;
-  padding-left: 1.5rem;
-}
-
-.feature-list li::before {
-  content: '✓';
-  position: absolute;
-  left: 0;
-  color: #10b981;
-  font-weight: bold;
-}
-
-.feature-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 2rem;
 }
 
@@ -803,7 +890,7 @@ html {
   margin-bottom: 1rem;
 }
 
-.feature-card h4 {
+.feature-card h3 {
   font-size: 1.25rem;
   font-weight: 600;
   color: #1e293b;
@@ -1101,54 +1188,50 @@ html {
   transform: scale(1.1);
 }
 
-.video-overlay {
-  position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  color: white;
-  z-index: 1;
+.demo-features {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
-.video-overlay h3 {
+.demo-feature {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.demo-feature-icon {
+  font-size: 2rem;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.demo-feature-text h4 {
   margin: 0 0 0.5rem 0;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 600;
-}
-
-.video-overlay p {
-  margin: 0;
-  opacity: 0.9;
-}
-
-.demo-features h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1.5rem;
   color: #1e293b;
 }
 
-.demo-list {
-  list-style: none;
-  padding: 0;
-  margin-bottom: 2rem;
-}
-
-.demo-list li {
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #e2e8f0;
-  position: relative;
-  padding-left: 2rem;
-}
-
-.demo-list li:before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: #10b981;
-  font-weight: bold;
+.demo-feature-text p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
 }
 
 .demo-cta {
-  margin-top: 1rem;
+  text-align: center;
+  margin-top: 3rem;
 }
 
 .error-message {

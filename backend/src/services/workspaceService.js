@@ -204,7 +204,38 @@ std::string greet(const std::string& name) {
     }));
   }
 
-  async deleteFile(sessionId, relativePath) {
+  async createFile(sessionId, relativePath, content = '') {
+    const workspaceDir = this.getWorkspacePath(sessionId);
+    const fullPath = path.join(workspaceDir, relativePath);
+    
+    // Security check - ensure file is within workspace
+    if (!fullPath.startsWith(workspaceDir)) {
+      throw new Error('Invalid file path');
+    }
+    
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    
+    // Create the file with initial content
+    await fs.writeFile(fullPath, content);
+    return fullPath;
+  }
+
+  async createDirectory(sessionId, relativePath) {
+    const workspaceDir = this.getWorkspacePath(sessionId);
+    const fullPath = path.join(workspaceDir, relativePath);
+    
+    // Security check - ensure directory is within workspace
+    if (!fullPath.startsWith(workspaceDir)) {
+      throw new Error('Invalid directory path');
+    }
+    
+    // Create the directory
+    await fs.mkdir(fullPath, { recursive: true });
+    return fullPath;
+  }
+
+  async deleteItem(sessionId, relativePath) {
     const workspaceDir = this.getWorkspacePath(sessionId);
     const fullPath = path.join(workspaceDir, relativePath);
     
@@ -219,6 +250,29 @@ std::string greet(const std::string& name) {
     } else {
       await fs.unlink(fullPath);
     }
+  }
+
+  async renameItem(sessionId, oldRelativePath, newRelativePath) {
+    const workspaceDir = this.getWorkspacePath(sessionId);
+    const oldFullPath = path.join(workspaceDir, oldRelativePath);
+    const newFullPath = path.join(workspaceDir, newRelativePath);
+    
+    // Security check - ensure both paths are within workspace
+    if (!oldFullPath.startsWith(workspaceDir) || !newFullPath.startsWith(workspaceDir)) {
+      throw new Error('Invalid file path');
+    }
+    
+    // Ensure target directory exists
+    await fs.mkdir(path.dirname(newFullPath), { recursive: true });
+    
+    // Rename the item
+    await fs.rename(oldFullPath, newFullPath);
+    return newFullPath;
+  }
+
+  // Keep deleteFile for backward compatibility
+  async deleteFile(sessionId, relativePath) {
+    return this.deleteItem(sessionId, relativePath);
   }
 
   async cleanupWorkspace(sessionId) {
