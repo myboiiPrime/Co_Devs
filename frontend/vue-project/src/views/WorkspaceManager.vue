@@ -226,6 +226,7 @@
 
 <script>
 import { buildApiUrl } from '@/config/api.js'
+import workspaceService from '@/services/workspaceService.js'
 
 export default {
   name: 'WorkspaceManager',
@@ -288,55 +289,29 @@ export default {
     async loadWorkspaces() {
       try {
         this.loading = true
-        // Mock data for now - replace with actual API call
-        this.workspaces = [
-          {
-            sessionId: 'session-1',
-            name: 'React Dashboard Project',
-            description: 'Building a modern admin dashboard with React and TypeScript',
-            owner: 'john_doe',
-            isOwner: true,
-            isActive: true,
-            participantCount: 3,
-            language: 'javascript',
-            createdAt: new Date().toISOString(),
-            participants: [
-              { id: 1, username: 'john_doe' },
-              { id: 2, username: 'jane_smith' },
-              { id: 3, username: 'bob_wilson' }
-            ]
-          },
-          {
-            sessionId: 'session-2',
-            name: 'Python ML Model',
-            description: 'Machine learning model for image classification',
-            owner: 'alice_cooper',
-            isOwner: false,
-            isActive: true,
-            participantCount: 2,
-            language: 'python',
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-            participants: [
-              { id: 1, username: 'alice_cooper' },
-              { id: 2, username: 'current_user' }
-            ]
-          },
-          {
-            sessionId: 'session-3',
-            name: 'Vue.js E-commerce',
-            description: 'E-commerce platform built with Vue.js and Node.js',
-            owner: 'mike_johnson',
-            isOwner: false,
-            isActive: false,
-            participantCount: 5,
-            language: 'javascript',
-            createdAt: new Date(Date.now() - 172800000).toISOString(),
-            participants: []
-          }
-        ]
+        // Get current username from localStorage or use a default
+        const username = localStorage.getItem('username') || 'current_user'
+        
+        if (!username) {
+          console.warn('No username available')
+          this.workspaces = []
+          return
+        }
+        
+        // Fetch workspaces from backend API
+        const workspaces = await workspaceService.getWorkspaces(username)
+        
+        // Ensure we have a valid array
+        this.workspaces = Array.isArray(workspaces) ? workspaces : []
+        
+        if (this.workspaces.length === 0) {
+          this.addNotification('No workspaces found. Create your first workspace!', 'info')
+        }
       } catch (error) {
         console.error('Error loading workspaces:', error)
-        this.addNotification('Error loading workspaces', 'error')
+        this.addNotification(`Error loading workspaces: ${error.message}`, 'error')
+        // Fallback to empty array
+        this.workspaces = []
       } finally {
         this.loading = false
       }
@@ -344,27 +319,28 @@ export default {
 
     async createWorkspace() {
       try {
-        // Mock workspace creation - replace with actual API call
-        const newWorkspace = {
-          sessionId: `session-${Date.now()}`,
-          name: this.newWorkspace.name,
+        // Get current username from localStorage or use a default
+        const username = localStorage.getItem('username') || 'current_user'
+        
+        const workspaceData = {
+          username,
+          sessionName: this.newWorkspace.name,
           description: this.newWorkspace.description,
-          owner: 'current_user',
-          isOwner: true,
-          isActive: true,
-          participantCount: 1,
-          language: this.newWorkspace.language,
-          createdAt: new Date().toISOString(),
-          participants: [{ id: 1, username: 'current_user' }]
+          language: this.newWorkspace.language
         }
 
-        this.workspaces.unshift(newWorkspace)
+        // Create workspace via backend API
+        const result = await workspaceService.createWorkspace(workspaceData)
+        
         this.addNotification('Workspace created successfully!', 'success')
         this.showCreateModal = false
         this.resetNewWorkspace()
         
+        // Refresh the workspace list
+        await this.loadWorkspaces()
+        
         // Open the new workspace
-        this.openWorkspace(newWorkspace)
+        this.openWorkspace({ sessionId: result.sessionId })
       } catch (error) {
         console.error('Error creating workspace:', error)
         this.addNotification('Error creating workspace', 'error')
@@ -372,11 +348,14 @@ export default {
     },
 
     openWorkspace(workspace) {
+      // Get current username from localStorage or use a default
+      const username = localStorage.getItem('username') || 'current_user'
+      
       this.$router.push({
         name: 'ide',
         query: {
           session: workspace.sessionId,
-          username: 'current_user' // Replace with actual username
+          username: username
         }
       })
     },

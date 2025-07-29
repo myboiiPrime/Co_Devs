@@ -237,6 +237,7 @@
             :documentId="selectedFile.path"
             @change="handleFileContentChange"
             @ai-request="handleAiRequest"
+            @selection-change="handleSelectionChange"
             class="code-editor-component"
           />
           <Terminal 
@@ -250,7 +251,17 @@
       </div>
     </div>
 
-    <!-- Status Bar -->
+    <!-- AI Assistant Panel (Right) -->
+    <AiAssistant
+      :selectedCode="selectedCode"
+      :hasSelection="hasSelection"
+      :currentLanguage="currentLanguage"
+      :fullCode="fileContent"
+      @insert-code="handleInsertCode"
+      class="ai-panel"
+    />
+
+    <!-- Status Bar (Bottom) -->
     <div class="status-bar">
       <div class="status-left">
         <span class="status-item">
@@ -296,6 +307,7 @@
 import Terminal from './Terminal.vue'
 import FileTree from './FileTree.vue'
 import CodeEditor from './CodeEditor.vue'
+import AiAssistant from './AiAssistant.vue'
 import { buildApiUrl } from '@/config/api.js'
 
 export default {
@@ -303,7 +315,8 @@ export default {
   components: {
     Terminal,
     FileTree,
-    CodeEditor
+    CodeEditor,
+    AiAssistant
   },
   props: {
     sessionId: {
@@ -334,7 +347,10 @@ export default {
       isRemovingUser: false,
       userManagementError: '',
       userManagementSuccess: '',
-      currentUsername: ''
+      currentUsername: '',
+      selectedCode: '',
+      hasSelection: false,
+      currentLanguage: 'javascript'
     }
   },
   computed: {
@@ -385,6 +401,16 @@ export default {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     },
 
+    handleSelectionChange(selection) {
+      this.selectedCode = selection.text || ''
+      this.hasSelection = selection.text && selection.text.length > 0
+    },
+
+    handleInsertCode(code) {
+      // Emit event to CodeEditor to insert code at cursor position
+      this.$refs.codeEditor?.insertCode(code)
+    },
+
     setupSocketListeners() {
       this.socket.on('session-joined', this.handleSessionJoined)
       this.socket.on('user-joined-session', this.handleUserJoined)
@@ -393,6 +419,7 @@ export default {
       this.socket.on('collaboration-notification', this.handleCollaborationNotification)
       this.socket.on('fs-read-result', this.handleFileReadResult)
       this.socket.on('fs-write-result', this.handleFileWriteResult)
+      this.socket.on('error', this.handleError)
     },
 
     joinSession() {
@@ -446,60 +473,64 @@ export default {
     },
 
     handleCollaborationNotification(data) {
-      this.addNotification(data)
-    },
-
-    handleFileReadResult(result) {
-      if (result.success) {
-        this.fileContent = result.content
-      } else {
-        this.addNotification({
-          type: 'error',
-          message: `Failed to read file: ${result.error}`
-        })
-      }
-    },
-
-    handleFileWriteResult(result) {
-      if (!result.success) {
-        this.addNotification({
-          type: 'error',
-          message: `Failed to save file: ${result.error}`
-        })
-      }
+      this.addNotification({
+        type: data.type || 'info',
+        message: data.message
+      })
     },
 
     handleFileSelected(file) {
       this.selectedFile = file
       this.activeTab = 'editor'
-      this.loadFileContent(file)
-      this.$emit('file-selected', file)
+      this.currentLanguage = this.getFileLanguage(file.name)
+      this.loadFileContent(file.path)
     },
 
-    async loadFileContent(file) {
-      try {
-        // Request file content from server
-        this.socket.emit('fs-read', {
-          sessionId: this.sessionId,
-          path: file.path
+    loadFileContent(filePath) {
+      this.socket.emit('fs-read', { 
+        sessionId: this.sessionId, 
+        path: filePath 
+      })
+    },
+
+    handleFileReadResult(data) {
+      if (data.success) {
+        this.fileContent = data.content || ''
+        this.addNotification({
+          type: 'success',
+          message: `File loaded: ${data.path}`
         })
-      } catch (error) {
-        console.error('Error loading file:', error)
+      } else {
         this.addNotification({
           type: 'error',
-          message: `Failed to load file: ${file.name}`
+          message: `Failed to read file: ${data.error || 'Unknown error'}`
+        })
+      }
+    },
+
+    handleFileWriteResult(data) {
+      if (data.success) {
+        this.addNotification({
+          type: 'success',
+          message: `File saved: ${data.path}`
+        })
+      } else {
+        this.addNotification({
+          type: 'error',
+          message: `Failed to save file: ${data.error || 'Unknown error'}`
         })
       }
     },
 
     handleFileContentChange(content) {
       this.fileContent = content
-      // Save file content to server
-      this.socket.emit('fs-write', {
-        sessionId: this.sessionId,
-        path: this.selectedFile.path,
-        content: content
-      })
+      if (this.selectedFile) {
+        this.socket.emit('fs-write', {
+          sessionId: this.sessionId,
+          path: this.selectedFile.path,
+          content: content
+        })
+      }
     },
 
     setActiveTab(tab) {
@@ -515,34 +546,30 @@ export default {
     getFileLanguage(filename) {
       const ext = filename.split('.').pop()?.toLowerCase()
       const languageMap = {
-        'js': 'javascript',
-        'jsx': 'javascript',
-        'ts': 'typescript',
-        'tsx': 'typescript',
-        'py': 'python',
-        'java': 'java',
-        'cpp': 'cpp',
-        'c': 'cpp',
-        'h': 'cpp',
-        'hpp': 'cpp',
-        'html': 'html',
-        'htm': 'html',
-        'css': 'css',
-        'scss': 'scss',
-        'sass': 'sass',
-        'json': 'json',
-        'xml': 'xml',
-        'md': 'markdown',
-        'txt': 'plaintext'
+        js: 'javascript',
+        ts: 'typescript',
+        py: 'python',
+        java: 'java',
+        cpp: 'cpp',
+        c: 'c',
+        html: 'html',
+        css: 'css',
+        json: 'json',
+        md: 'markdown',
+        vue: 'vue'
       }
       return languageMap[ext] || 'plaintext'
     },
 
     handleAiRequest(request) {
       // Handle AI requests from the code editor
+      console.log('AI Request:', request)
+    },
+
+    handleError(error) {
       this.addNotification({
-        type: 'info',
-        message: `AI ${request.action} request: ${request.selectedText.substring(0, 50)}...`
+        type: 'error',
+        message: error.message || error || 'An error occurred'
       })
     },
 
@@ -550,22 +577,15 @@ export default {
       this.addNotification(notification)
     },
 
-    handleError(error) {
-      this.addNotification({
-        type: 'error',
-        message: error.message || 'An error occurred'
-      })
-    },
-
     addNotification(notification) {
       const id = Date.now() + Math.random()
       this.notifications.push({
         id,
-        ...notification,
+        type: notification.type || 'info',
+        message: notification.message,
         timestamp: new Date()
       })
 
-      // Auto-remove after 5 seconds
       setTimeout(() => {
         this.removeNotification(id)
       }, 5000)
@@ -679,6 +699,9 @@ export default {
         this.socket.off('user-left-session')
         this.socket.off('session-updated')
         this.socket.off('collaboration-notification')
+        this.socket.off('fs-read-result')
+        this.socket.off('fs-write-result')
+        this.socket.off('error')
       }
     }
   }
@@ -689,7 +712,25 @@ export default {
 /* VS Code Theme Colors */
 .vscode-container {
   display: flex;
+  flex-direction: column;
   height: 100vh;
+  width: 100%;
+  background: #1e1e1e;
+  color: #cccccc;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+}
+
+/* Main layout container */
+.vscode-container {
+  display: grid;
+  grid-template-columns: 48px auto 1fr 350px;
+  grid-template-rows: 1fr 22px;
+  grid-template-areas: 
+    "activity sidebar main ai"
+    "status status status status";
+  height: 100vh;
+  width: 100%;
   background: #1e1e1e;
   color: #cccccc;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -698,7 +739,7 @@ export default {
 
 /* Activity Bar */
 .activity-bar {
-  width: 48px;
+  grid-area: activity;
   background: #333333;
   display: flex;
   flex-direction: column;
@@ -737,6 +778,7 @@ export default {
 
 /* Sidebar */
 .sidebar {
+  grid-area: sidebar;
   width: 300px;
   background: #252526;
   border-right: 1px solid #2d2d2d;
@@ -1018,10 +1060,12 @@ export default {
 
 /* Main Content */
 .main-content {
-  flex: 1;
+  grid-area: main;
   display: flex;
   flex-direction: column;
   background: #1e1e1e;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Title Bar */
@@ -1084,8 +1128,10 @@ export default {
 /* Editor Area */
 .editor-area {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .editor-tabs {
@@ -1140,15 +1186,29 @@ export default {
 
 .editor-content {
   flex: 1;
+  min-width: 0;
   background: #1e1e1e;
+  width: 100%;
+}
+
+.code-editor-component {
+  height: 100%;
+  width: 100%;
 }
 
 .terminal-component {
   height: 100%;
 }
 
-/* Status Bar */
+/* AI Assistant Panel */
+.ai-panel {
+  grid-area: ai;
+  border-left: 1px solid #2d2d2d;
+}
+
+/* Status Bar (Bottom) */
 .status-bar {
+  grid-area: status;
   height: 22px;
   background: #007acc;
   color: #ffffff;
@@ -1384,9 +1444,22 @@ export default {
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+  .vscode-container {
+    grid-template-columns: 48px auto 1fr 300px;
+  }
+}
+
 @media (max-width: 768px) {
-  .sidebar {
-    width: 250px;
+  .vscode-container {
+    grid-template-columns: 40px 250px 1fr;
+    grid-template-areas: 
+      "activity sidebar main"
+      "status status status";
+  }
+  
+  .ai-panel {
+    display: none;
   }
   
   .activity-bar {
@@ -1396,6 +1469,10 @@ export default {
   .activity-item {
     width: 40px;
     height: 40px;
+  }
+  
+  .sidebar {
+    width: 250px;
   }
 }
 </style>

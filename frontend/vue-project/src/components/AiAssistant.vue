@@ -135,22 +135,29 @@ const sendMessage = async () => {
   isTyping.value = true
   
   try {
-    // Determine the type of request based on message content
-    let response
-    if (userMessage.toLowerCase().includes('explain')) {
-      const codeToExplain = props.hasSelection ? props.selectedCode : props.fullCode
-      response = await aiService.explainCode(codeToExplain, props.currentLanguage)
-      addMessage('assistant', response)
-    } else if (userMessage.toLowerCase().includes('optimize')) {
-      const codeToOptimize = props.hasSelection ? props.selectedCode : props.fullCode
-      response = await aiService.optimizeCode(codeToOptimize, props.currentLanguage)
-      addMessage('assistant', response)
-    } else if (userMessage.toLowerCase().includes('generate') || userMessage.toLowerCase().includes('create')) {
-      response = await aiService.generateCode(userMessage, props.currentLanguage)
-      addMessage('assistant', 'Here\'s the generated code:', response, props.currentLanguage)
+    // For now, we'll use the generate endpoint as a general chat endpoint
+    // since it can handle various types of requests and conversations
+    const response = await aiService.generateCode(userMessage, props.currentLanguage)
+    
+    // Check if the response looks like code (contains common code patterns)
+    const codePatterns = [
+      /function\s+\w+/,
+      /class\s+\w+/,
+      /def\s+\w+/,
+      /const\s+\w+\s*=/,
+      /let\s+\w+\s*=/,
+      /var\s+\w+\s*=/,
+      /<\w+.*>/,
+      /import\s+/,
+      /from\s+['"`]/
+    ]
+    
+    const looksLikeCode = codePatterns.some(pattern => pattern.test(response))
+    
+    if (looksLikeCode) {
+      addMessage('assistant', 'Here\'s what I generated:', response, props.currentLanguage)
     } else {
-      // General chat - you can extend this to use a general AI service
-      addMessage('assistant', 'I can help you with code explanation, optimization, and generation. Try asking me to "explain this code" or "generate a function that..."')
+      addMessage('assistant', response)
     }
   } catch (error) {
     addMessage('assistant', `Sorry, I encountered an error: ${error.message}`)
@@ -216,14 +223,17 @@ watch(() => messages.value.length, () => {
 </script>
 
 <style scoped>
+/* VS Code Dark Theme for AI Assistant */
 .ai-assistant {
   width: 350px;
   height: 100%;
-  background: white;
-  border-left: 1px solid #e1e5e9;
+  background: #252526;
+  border-left: 1px solid #2d2d2d;
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  color: #cccccc;
 }
 
 .ai-assistant.collapsed {
@@ -231,9 +241,10 @@ watch(() => messages.value.length, () => {
 }
 
 .ai-header {
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e1e5e9;
+  height: 35px;
+  padding: 0 16px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3e3e3e;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -246,15 +257,18 @@ watch(() => messages.value.length, () => {
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  color: #2d3748;
+  color: #cccccc;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .ai-icon {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .typing-indicator {
-  color: #4299e1;
+  color: #007acc;
   animation: pulse 1.5s infinite;
 }
 
@@ -267,15 +281,27 @@ watch(() => messages.value.length, () => {
   background: none;
   border: none;
   font-size: 12px;
-  color: #718096;
+  color: #858585;
   cursor: pointer;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.collapse-btn:hover {
+  background: #3e3e3e;
+  color: #cccccc;
 }
 
 .ai-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: calc(100% - 60px);
+  height: calc(100% - 35px);
 }
 
 .chat-messages {
@@ -285,6 +311,7 @@ watch(() => messages.value.length, () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: #1e1e1e;
 }
 
 .message {
@@ -300,28 +327,32 @@ watch(() => messages.value.length, () => {
 }
 
 .message-content {
-  background: #f7fafc;
+  background: #2d2d2d;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 8px;
   position: relative;
+  border: 1px solid #3e3e3e;
 }
 
 .message.user .message-content {
-  background: #4299e1;
-  color: white;
+  background: #007acc;
+  color: #ffffff;
+  border-color: #005a9e;
 }
 
 .message-text {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.4;
   margin-bottom: 4px;
+  color: inherit;
 }
 
 .message-code {
   margin-top: 8px;
-  background: #1a202c;
+  background: #1a1a1a;
   border-radius: 6px;
   overflow: hidden;
+  border: 1px solid #3e3e3e;
 }
 
 .code-header {
@@ -329,38 +360,41 @@ watch(() => messages.value.length, () => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #2d3748;
-  color: #e2e8f0;
-  font-size: 12px;
+  background: #2d2d2d;
+  color: #cccccc;
+  font-size: 11px;
+  border-bottom: 1px solid #3e3e3e;
 }
 
 .insert-btn {
-  background: #4299e1;
+  background: #007acc;
   color: white;
   border: none;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 3px;
   font-size: 11px;
   cursor: pointer;
+  transition: background 0.2s ease;
 }
 
 .insert-btn:hover {
-  background: #3182ce;
+  background: #005a9e;
 }
 
 .message-code pre {
   margin: 0;
   padding: 12px;
-  color: #e2e8f0;
+  color: #cccccc;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 12px;
   line-height: 1.4;
   overflow-x: auto;
+  background: #1a1a1a;
 }
 
 .message-time {
   font-size: 11px;
-  color: #a0aec0;
+  color: #858585;
   margin-top: 4px;
 }
 
@@ -369,35 +403,38 @@ watch(() => messages.value.length, () => {
 }
 
 .chat-input {
-  border-top: 1px solid #e1e5e9;
-  background: white;
+  border-top: 1px solid #3e3e3e;
+  background: #252526;
 }
 
 .quick-actions {
   display: flex;
   gap: 4px;
   padding: 8px 12px;
-  border-bottom: 1px solid #e1e5e9;
+  border-bottom: 1px solid #3e3e3e;
+  background: #2d2d2d;
 }
 
 .quick-btn {
   padding: 4px 8px;
-  border: 1px solid #e1e5e9;
-  background: white;
-  border-radius: 16px;
+  border: 1px solid #3e3e3e;
+  background: #252526;
+  color: #cccccc;
+  border-radius: 3px;
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .quick-btn:hover:not(:disabled) {
-  background: #f7fafc;
-  border-color: #cbd5e0;
+  background: #3e3e3e;
+  border-color: #007acc;
 }
 
 .quick-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  color: #858585;
 }
 
 .input-area {
@@ -405,42 +442,71 @@ watch(() => messages.value.length, () => {
   padding: 12px;
   gap: 8px;
   align-items: flex-end;
+  background: #252526;
 }
 
 .message-input {
   flex: 1;
-  border: 1px solid #e1e5e9;
-  border-radius: 8px;
+  border: 1px solid #3e3e3e;
+  border-radius: 3px;
   padding: 8px 12px;
-  font-size: 14px;
+  font-size: 13px;
   resize: none;
   font-family: inherit;
   line-height: 1.4;
+  background: #1e1e1e;
+  color: #cccccc;
+}
+
+.message-input::placeholder {
+  color: #858585;
 }
 
 .message-input:focus {
   outline: none;
-  border-color: #4299e1;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  border-color: #007acc;
+  box-shadow: 0 0 0 1px #007acc;
 }
 
 .send-btn {
-  background: #4299e1;
+  background: #007acc;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 8px 12px;
   cursor: pointer;
-  font-size: 16px;
-  transition: background 0.2s;
+  font-size: 14px;
+  transition: background 0.2s ease;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #3182ce;
+  background: #005a9e;
 }
 
 .send-btn:disabled {
-  background: #a0aec0;
+  background: #464647;
   cursor: not-allowed;
+}
+
+/* Scrollbar styling to match VS Code */
+.chat-messages::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
 }
 </style>

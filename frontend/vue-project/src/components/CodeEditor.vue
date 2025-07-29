@@ -232,8 +232,8 @@ defineExpose({
   display: flex;
   flex-direction: column;
   height: 100%;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  width: 100%;
+  background: #1e1e1e;
   overflow: hidden;
 }
 
@@ -242,15 +242,17 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background-color: #f5f5f5;
-  border-bottom: 1px solid #ddd;
+  background-color: #2d2d2d;
+  border-bottom: 1px solid #3e3e3e;
+  width: 100%;
 }
 
 .language-selector {
   padding: 4px 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #3e3e3e;
   border-radius: 4px;
-  background-color: white;
+  background-color: #3c3c3c;
+  color: #cccccc;
 }
 
 .editor-actions {
@@ -305,6 +307,6 @@ defineExpose({
 
 .editor-container {
   flex: 1;
-  min-height: 400px;
+  width: 100%;
 }
 </style>

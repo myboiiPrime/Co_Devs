@@ -452,15 +452,24 @@ module.exports = (io) => {
         
         const session = await CollaborationSession.findOne({ sessionId });
         if (!session || !session.hasAccess(socket.userId)) {
-          socket.emit('error', { message: 'Access denied' });
+          socket.emit('fs-read-result', { 
+            path, 
+            success: false, 
+            error: 'Access denied' 
+          });
           return;
         }
 
         const content = await workspaceService.readFile(sessionId, path);
-        socket.emit('fs-read-result', { path, content });
+        socket.emit('fs-read-result', { path, content, success: true });
       } catch (error) {
         console.error('FS read error:', error);
-        socket.emit('error', { message: 'Failed to read file' });
+        // CHANGE THIS LINE to emit consistent format
+        socket.emit('fs-read-result', { 
+          path: data.path, 
+          success: false, 
+          error: error.message || 'Failed to read file' 
+        });
       }
     });
 

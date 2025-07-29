@@ -549,4 +549,60 @@ router.delete('/:sessionId', auth, async (req, res) => {
   }
 });
 
+// List workspaces for a user (no auth required for now - using username)
+router.get('/workspaces/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    // Find user
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.json({ workspaces: [] }); // Return empty array if user not found
+    }
+
+    // Find sessions where user is owner or participant
+    const sessions = await CollaborationSession.find({
+      $or: [
+        { owner: user._id },
+        { 'participants.user': user._id }
+      ]
+    })
+    .populate('owner', 'username')
+    .populate('participants.user', 'username')
+    .populate('documentId', 'title language')
+    .sort({ createdAt: -1 });
+
+    // Transform sessions to workspace format
+    const workspaces = sessions.map(session => {
+      const isOwner = session.owner._id.toString() === user._id.toString();
+      const participants = session.participants.map(p => ({
+        id: p.user._id,
+        username: p.user.username
+      }));
+
+      return {
+        sessionId: session.sessionId,
+        name: session.name,
+        description: session.description,
+        owner: session.owner.username,
+        isOwner,
+        isActive: session.isActive,
+        participantCount: session.participants.length,
+        language: session.documentId?.language || 'javascript',
+        createdAt: session.createdAt.toISOString(),
+        participants
+      };
+    });
+
+    res.json({ workspaces });
+  } catch (error) {
+    console.error('List workspaces error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

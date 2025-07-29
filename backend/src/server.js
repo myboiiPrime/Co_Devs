@@ -17,7 +17,13 @@ const server = http.createServer(app);
 // Dynamic CORS configuration
 const getAllowedOrigins = () => {
   const clientUrl = process.env.CLIENT_URL;
-  const defaultOrigins = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:4173"];
+  const defaultOrigins = [
+    "http://localhost:3000", 
+    "http://localhost:5173", 
+    "http://localhost:5174",
+    "http://localhost:8080", 
+    "http://localhost:4173"
+  ];
   
   if (clientUrl && !defaultOrigins.includes(clientUrl)) {
     return [...defaultOrigins, clientUrl];

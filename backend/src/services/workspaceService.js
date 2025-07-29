@@ -183,7 +183,40 @@ std::string greet(const std::string& name) {
       throw new Error('Invalid file path');
     }
     
-    return await fs.readFile(fullPath, 'utf8');
+    try {
+      return await fs.readFile(fullPath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // File doesn't exist, return empty content or create it
+        console.log(`File not found: ${fullPath}, creating with default content`);
+        
+        // Create the file with default content based on extension
+        const defaultContent = this.getDefaultContentForFile(relativePath);
+        await this.writeFile(sessionId, relativePath, defaultContent);
+        return defaultContent;
+      }
+      throw error; // Re-throw other errors
+    }
+  }
+
+  getDefaultContentForFile(relativePath) {
+    const ext = path.extname(relativePath).toLowerCase();
+    const fileName = path.basename(relativePath);
+    
+    // Default content based on file type
+    const defaults = {
+      '.js': '// Welcome to your collaborative JavaScript project!\nconsole.log("Hello, World!");\n\n// Start coding here...\n',
+      '.ts': '// Welcome to your collaborative TypeScript project!\nconsole.log("Hello, World!");\n\n// Start coding here...\n',
+      '.py': '# Welcome to your collaborative Python project!\nprint("Hello, World!")\n\n# Start coding here...\n',
+      '.java': 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}\n',
+      '.cpp': '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}\n',
+      '.html': '<!DOCTYPE html>\n<html>\n<head>\n    <title>Collaborative Project</title>\n</head>\n<body>\n    <h1>Hello, World!</h1>\n</body>\n</html>\n',
+      '.css': '/* Welcome to your collaborative CSS project! */\nbody {\n    font-family: Arial, sans-serif;\n    margin: 0;\n    padding: 20px;\n}\n',
+      '.md': '# Collaborative Project\n\nWelcome to your shared workspace!\n\n## Getting Started\n\nStart editing this file to begin your collaboration.\n',
+      '.json': '{\n  "name": "collaborative-project",\n  "version": "1.0.0",\n  "description": "A collaborative project"\n}\n'
+    };
+    
+    return defaults[ext] || `// ${fileName}\n// Welcome to your collaborative project!\n// Start coding here...\n`;
   }
 
   async listFiles(sessionId, relativePath = '') {
