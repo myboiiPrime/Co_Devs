@@ -13,27 +13,124 @@ module.exports = (io) => {
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
+      console.log('🐛 SOCKET AUTH: Received token:', token ? 'Token present' : 'No token');
+      
       if (!token) {
+        console.error('❌ SOCKET AUTH: No token provided');
         return next(new Error('Authentication error'));
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('🐛 SOCKET AUTH: Token decoded successfully, userId:', decoded.userId);
+      
       const user = await User.findById(decoded.userId).select('-password');
+      console.log('🐛 SOCKET AUTH: User found:', user ? user.username : 'No user');
       
       if (!user) {
+        console.error('❌ SOCKET AUTH: User not found for ID:', decoded.userId);
         return next(new Error('User not found'));
       }
 
       socket.user = user;
       socket.userId = user._id.toString();
+      console.log('✅ SOCKET AUTH: Authentication successful for user:', user.username);
       next();
     } catch (error) {
+      console.error('❌ SOCKET AUTH: Authentication error:', error.message);
       next(new Error('Authentication error'));
     }
   });
 
   io.on('connection', async (socket) => {
     console.log(`🔌 User connected: ${socket.user.username}`);
+
+    // Add catch-all event listener for debugging
+    socket.onAny(async (eventName, ...args) => {
+      console.log(`🐛 BACKEND: Received event "${eventName}" with args:`, args);
+      
+      // WORKAROUND: Handle join-collaboration directly in catch-all listener
+      if (eventName === 'join-collaboration') {
+        console.log('🎯 WORKAROUND: Handling join-collaboration in catch-all listener');
+        const data = args[0];
+        console.log('🎯 WORKAROUND: Session ID:', data?.sessionId);
+        console.log('🎯 WORKAROUND: Socket info:', { 
+          id: socket.id, 
+          userId: socket.userId, 
+          username: socket.user?.username 
+        });
+        
+        // CRITICAL FIX: Join the socket to the session room for chat functionality
+        const sessionId = data?.sessionId;
+        if (sessionId) {
+          socket.join(`session:${sessionId}`);
+          console.log('🎯 WORKAROUND: Socket joined session room:', `session:${sessionId}`);
+          
+          // Update connection to track current session
+          const connection = activeConnections.get(socket.userId);
+          if (connection) {
+            connection.currentSession = sessionId;
+            console.log('🎯 WORKAROUND: Updated connection currentSession:', sessionId);
+          }
+        }
+        
+        // Fetch actual session data from database
+        try {
+          const session = await CollaborationSession.findOne({ sessionId })
+            .populate('owner', 'username')
+            .populate('documentId', 'title')
+            .populate('participants.user', 'username');
+          
+          if (session) {
+            console.log('🎯 WORKAROUND: Found session in database:', {
+              sessionId: session.sessionId,
+              documentTitle: session.documentId?.title,
+              owner: session.owner?.username,
+              participantCount: session.participants?.length
+            });
+            
+            // Respond with actual session data
+            socket.emit('session-joined', {
+              session: {
+                sessionId: session.sessionId,
+                name: session.documentId?.title || 'Untitled Session',
+                owner: { username: session.owner?.username || 'Unknown' },
+                createdAt: session.createdAt
+              },
+              participants: session.participants || [],
+              terminals: session.terminalSessions || []
+            });
+          } else {
+            console.log('🎯 WORKAROUND: Session not found in database, using fallback');
+            // Fallback response if session not found
+            socket.emit('session-joined', {
+              session: {
+                sessionId: data.sessionId,
+                name: 'Session Not Found',
+                owner: { username: 'unknown' },
+                createdAt: new Date()
+              },
+              participants: [],
+              terminals: []
+            });
+          }
+        } catch (error) {
+          console.error('🎯 WORKAROUND: Error fetching session data:', error);
+          // Fallback response on error
+          socket.emit('session-joined', {
+            session: {
+              sessionId: data.sessionId,
+              name: 'Error Loading Session',
+              owner: { username: 'unknown' },
+              createdAt: new Date()
+            },
+            participants: [],
+            terminals: []
+          });
+        }
+        
+        console.log('🎯 WORKAROUND: Emitted session-joined response');
+      }
+    });
 
     // Update user online status
     await User.findByIdAndUpdate(socket.userId, { 
@@ -206,96 +303,113 @@ module.exports = (io) => {
       }
     });
 
-    // Collaboration session events
+    // Test event to verify socket communication
+    socket.on('test-event', (data) => {
+      console.log('🧪 TEST EVENT RECEIVED:', data);
+      socket.emit('test-response', { message: 'Backend received test event', data });
+    });
+
+    // Simple test handler to verify handler registration works
+    socket.on('simple-test', (data) => {
+      console.log('🟢 SIMPLE TEST HANDLER WORKS!', data);
+    });
+
+    // STEP 1: Minimal join-collaboration handler - just test event reception
     socket.on('join-collaboration', async (data) => {
-      try {
-        const { sessionId } = data;
-        
-        const session = await CollaborationSession.findOne({ sessionId })
-          .populate('owner', 'username email')
-          .populate('participants.user', 'username email');
-        
-        if (!session) {
-          socket.emit('error', { message: 'Session not found' });
-          return;
-        }
-
-        if (!session.hasAccess(socket.userId)) {
-          socket.emit('error', { message: 'Access denied' });
-          return;
-        }
-
-        // Leave previous session if any
-        const connection = activeConnections.get(socket.userId);
-        if (connection.currentSession) {
-          socket.leave(`session:${connection.currentSession}`);
-        }
-
-        // Join new session
-        socket.join(`session:${sessionId}`);
-        connection.currentSession = sessionId;
-
-        // Add user to session if not already a participant
-        if (!session.participants.some(p => p.user._id.toString() === socket.userId)) {
-          await session.addParticipant(socket.userId);
-        }
-
-        // Send session data
-        const updatedSession = await CollaborationSession.findOne({ sessionId })
-          .populate('owner', 'username email')
-          .populate('participants.user', 'username email');
-
-        socket.emit('session-joined', {
-          session: updatedSession,
-          participants: updatedSession.participants
-        });
-
-        // Notify other participants
-        socket.to(`session:${sessionId}`).emit('user-joined-session', {
-          user: {
-            id: socket.user._id,
-            username: socket.user.username
-          },
-          message: `${socket.user.username} joined the collaboration`
-        });
-
-      } catch (error) {
-        console.error('Join collaboration error:', error);
-        socket.emit('error', { message: 'Failed to join collaboration' });
-      }
+      console.log('🎯 STEP 1: join-collaboration event RECEIVED!', data);
+      console.log('🎯 STEP 1: Socket info:', { 
+        id: socket.id, 
+        userId: socket.userId, 
+        username: socket.user?.username 
+      });
+      
+      // Immediately respond to confirm event was received
+      socket.emit('session-joined', {
+        session: {
+          sessionId: data.sessionId,
+          name: 'Test Session',
+          owner: { username: 'test-owner' },
+          createdAt: new Date()
+        },
+        participants: [],
+        terminals: []
+      });
+      
+      console.log('🎯 STEP 1: Emitted session-joined response');
     });
 
     // Create new terminal in session
     socket.on('create-terminal', async (data) => {
+      console.log('🐛 CREATE-TERMINAL EVENT RECEIVED:', data);
+      
       try {
         const { sessionId, shellType = 'bash', name = 'Terminal' } = data;
         
+        console.log('🐛 Step 1: Extracting data:', { sessionId, shellType, name });
+        
         const session = await CollaborationSession.findOne({ sessionId });
         if (!session) {
+          console.error('❌ Session not found:', sessionId);
           socket.emit('error', { message: 'Session not found' });
           return;
         }
-
+        
+        console.log('🐛 Step 2: Session found:', {
+          sessionId: session.sessionId,
+          owner: session.owner,
+          participants: session.participants.length,
+          terminalCount: session.terminalSessions.length,
+          settings: session.settings
+        });
+    
         if (!session.hasAccess(socket.userId)) {
+          console.error('❌ Access denied for user:', socket.userId);
           socket.emit('error', { message: 'Access denied' });
           return;
         }
-
+        
+        console.log('🐛 Step 3: Access granted for user:', socket.userId);
+    
         // Check terminal limit
         if (session.terminalSessions.length >= session.settings.maxTerminals) {
+          console.error('❌ Terminal limit reached:', {
+            current: session.terminalSessions.length,
+            max: session.settings.maxTerminals
+          });
           socket.emit('error', { message: 'Maximum number of terminals reached' });
           return;
         }
-
+        
+        console.log('🐛 Step 4: Terminal limit check passed:', {
+          current: session.terminalSessions.length,
+          max: session.settings.maxTerminals
+        });
+    
         // Check if shell type is allowed
-        if (!session.settings.allowedShells.includes(shellType)) {
+        const allowedShells = (session.settings.allowedShells && session.settings.allowedShells.length > 0) 
+          ? session.settings.allowedShells 
+          : ['bash', 'cmd', 'powershell', 'python', 'node'];
+    
+        console.log('🐛 Step 5: Shell validation debug:', {
+          shellType,
+          allowedShells,
+          sessionSettings: session.settings,
+          isAllowed: allowedShells.includes(shellType)
+        });
+    
+        if (!allowedShells.includes(shellType)) {
+          console.error('❌ Shell type not allowed:', { shellType, allowedShells });
           socket.emit('error', { message: 'Shell type not allowed' });
           return;
         }
-
+        
+        console.log('🐛 Step 6: Shell type validation passed');
+    
         const terminalId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        console.log('🐛 Step 7: Generated terminal ID:', terminalId);
         
         // Create terminal
+        console.log('🐛 Step 8: Creating terminal via terminalService...');
         const terminal = terminalService.createTerminal(
           sessionId,
           terminalId,
@@ -303,17 +417,22 @@ module.exports = (io) => {
           session.workspaceDir,
           socket
         );
-
+        console.log('🐛 Step 9: Terminal created via terminalService:', !!terminal);
+    
         // Save terminal to session
+        console.log('🐛 Step 10: Adding terminal to session...');
         await session.addTerminal({
           terminalId,
           name,
           shellType,
           createdBy: socket.userId
         });
-
+        console.log('🐛 Step 11: Terminal added to session successfully');
+    
+        // In the create-terminal handler, after the session room emit:
         // Notify all participants
-        io.to(`session:${sessionId}`).emit('terminal-created', {
+        console.log('🐛 Step 12: Emitting terminal-created event to session:', `session:${sessionId}`);
+        const eventData = {
           terminalId,
           name,
           shellType,
@@ -321,13 +440,22 @@ module.exports = (io) => {
             id: socket.user._id,
             username: socket.user.username
           }
-        });
-
-        console.log(`🖥️ Terminal created: ${terminalId} by ${socket.user.username}`);
-
+        };
+        console.log('🐛 Step 13: Event data:', eventData);
+    
+        // Emit to session room
+        io.to(`session:${sessionId}`).emit('terminal-created', eventData);
+        console.log('🐛 Step 14: terminal-created event emitted to session room');
+    
+        // ALSO emit directly to the requesting socket as a fallback
+        socket.emit('terminal-created', eventData);
+        console.log('🐛 Step 15: terminal-created event emitted directly to requesting socket');
+    
+        console.log(`✅ Terminal created successfully: ${terminalId} by ${socket.user.username}`);
       } catch (error) {
-        console.error('Create terminal error:', error);
-        socket.emit('error', { message: 'Failed to create terminal' });
+        console.error('❌ Create terminal error:', error);
+        console.error('❌ Error stack:', error.stack);
+        socket.emit('error', { message: 'Failed to create terminal: ' + error.message });
       }
     });
 
@@ -336,13 +464,7 @@ module.exports = (io) => {
       try {
         const { sessionId, terminalId, input } = data;
         
-        // Verify user has access to session
-        const connection = activeConnections.get(socket.userId);
-        if (!connection || connection.currentSession !== sessionId) {
-          socket.emit('error', { message: 'Not in collaboration session' });
-          return;
-        }
-
+        // Remove collaboration session check - allow all terminal input
         terminalService.writeToTerminal(sessionId, terminalId, input);
         
         // Broadcast input to other users (for display purposes)
@@ -395,8 +517,8 @@ module.exports = (io) => {
           return;
         }
 
-        // Remove terminal
-        terminalService.removeTerminal(sessionId, terminalId);
+        // Destroy terminal
+        terminalService.destroyTerminal(sessionId, terminalId);
         await session.removeTerminal(terminalId);
 
         // Notify all participants
@@ -424,6 +546,44 @@ module.exports = (io) => {
         socket.emit('terminal-history', { terminalId, history });
       } catch (error) {
         console.error('Get terminal history error:', error);
+      }
+    });
+
+    // Get existing terminals for a session
+    socket.on('get-session-terminals', async (data) => {
+      try {
+        const { sessionId } = data;
+        console.log('🔍 Getting existing terminals for session:', sessionId);
+        
+        const session = await CollaborationSession.findOne({ sessionId });
+        if (!session) {
+          console.log('❌ Session not found:', sessionId);
+          socket.emit('error', { message: 'Session not found' });
+          return;
+        }
+    
+        // Get terminals from session
+        const terminals = session.terminals || [];
+        console.log('📋 Found terminals in session:', terminals.length);
+        
+        // Send existing terminals to the requesting client
+        terminals.forEach(terminal => {
+          const eventData = {
+            terminalId: terminal.terminalId,
+            name: terminal.name,
+            shellType: terminal.shellType,
+            createdBy: terminal.createdBy
+          };
+          
+          console.log('📤 Sending existing terminal:', eventData);
+          socket.emit('terminal-created', eventData);
+        });
+        
+        console.log('✅ Sent all existing terminals to client');
+        
+      } catch (error) {
+        console.error('❌ Get session terminals error:', error);
+        socket.emit('error', { message: 'Failed to get terminals: ' + error.message });
       }
     });
 
@@ -606,51 +766,7 @@ module.exports = (io) => {
       }
     });
 
-    // Handle command execution (for non-interactive terminals)
-    socket.on('execute-command', async (data) => {
-      try {
-        const { sessionId, terminalId, command } = data;
 
-        const connection = activeConnections.get(socket.userId);
-        if (!connection || connection.currentSession !== sessionId) {
-          socket.emit('error', { message: 'Not in collaboration session' });
-          return;
-        }
-
-        const session = await CollaborationSession.findOne({ sessionId });
-        if (!session) {
-          socket.emit('error', { message: 'Session not found' });
-          return;
-        }
-
-        // Execute command using workspace service
-        const result = await terminalService.executeCommand(
-          sessionId, 
-          command, 
-          session.workspaceDir
-        );
-
-        // Send result back to user
-        socket.emit('command-result', {
-          terminalId,
-          result
-        });
-
-        // Broadcast command execution to other users
-        socket.to(`session:${sessionId}`).emit('command-executed', {
-          terminalId,
-          command,
-          user: {
-            id: socket.user._id,
-            username: socket.user.username
-          }
-        });
-
-      } catch (error) {
-        console.error('Execute command error:', error);
-        socket.emit('error', { message: 'Failed to execute command' });
-      }
-    });
 
     // Handle disconnection
     socket.on('disconnect', async () => {
@@ -704,6 +820,118 @@ module.exports = (io) => {
 
       // Remove connection
       activeConnections.delete(socket.userId);
+    });
+
+    // Chat functionality
+    socket.on('send-chat-message', async (data) => {
+      try {
+        console.log('🔵 BACKEND: Received send-chat-message event:', data);
+        console.log('🔵 BACKEND: Socket user:', socket.user?.username);
+        console.log('🔵 BACKEND: Socket userId:', socket.userId);
+        
+        const { sessionId, content } = data;
+        
+        const session = await CollaborationSession.findOne({ sessionId });
+        if (!session || !session.hasAccess(socket.userId)) {
+          console.log('❌ BACKEND: Access denied for chat message');
+          socket.emit('error', { message: 'Access denied' });
+          return;
+        }
+
+        console.log('🔵 BACKEND: Session found, creating message data');
+        const messageData = {
+          id: Date.now() + Math.random(),
+          user: {
+            id: socket.user._id,
+            username: socket.user.username
+          },
+          content: content.trim(),
+          timestamp: new Date(),
+          type: 'message'
+        };
+
+        console.log('🔵 BACKEND: Message data created:', messageData);
+
+        // Save message to session
+        if (!session.chatMessages) {
+          session.chatMessages = [];
+        }
+        session.chatMessages.push(messageData);
+        await session.save();
+
+        console.log('🔵 BACKEND: Message saved to database');
+
+        // Broadcast to all users in the session
+        io.to(`session:${sessionId}`).emit('chat-message', messageData);
+        console.log('🟢 BACKEND: Chat message broadcasted to session:', sessionId);
+
+      } catch (error) {
+        console.error('❌ BACKEND: Chat message error:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
+    });
+
+    socket.on('get-chat-history', async (data) => {
+      try {
+        const { sessionId } = data;
+        
+        const session = await CollaborationSession.findOne({ sessionId });
+        if (!session || !session.hasAccess(socket.userId)) {
+          socket.emit('error', { message: 'Access denied' });
+          return;
+        }
+
+        const messages = session.chatMessages || [];
+        socket.emit('chat-history', { messages });
+
+      } catch (error) {
+        console.error('Chat history error:', error);
+        socket.emit('error', { message: 'Failed to load chat history' });
+      }
+    });
+
+    socket.on('user-typing', async (data) => {
+      try {
+        const { sessionId } = data;
+        
+        const session = await CollaborationSession.findOne({ sessionId });
+        if (!session || !session.hasAccess(socket.userId)) {
+          return;
+        }
+
+        // Broadcast typing indicator to other users
+        socket.to(`session:${sessionId}`).emit('user-typing', {
+          user: {
+            id: socket.user._id,
+            username: socket.user.username
+          }
+        });
+
+      } catch (error) {
+        console.error('User typing error:', error);
+      }
+    });
+
+    socket.on('user-stopped-typing', async (data) => {
+      try {
+        const { sessionId } = data;
+        
+        const session = await CollaborationSession.findOne({ sessionId });
+        if (!session || !session.hasAccess(socket.userId)) {
+          return;
+        }
+
+        // Broadcast stop typing indicator to other users
+        socket.to(`session:${sessionId}`).emit('user-stopped-typing', {
+          user: {
+            id: socket.user._id,
+            username: socket.user.username
+          }
+        });
+
+      } catch (error) {
+        console.error('User stopped typing error:', error);
+      }
     });
   });
 

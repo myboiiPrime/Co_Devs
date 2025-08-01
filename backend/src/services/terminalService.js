@@ -7,6 +7,47 @@ class TerminalService {
     this.terminals = new Map(); // sessionId -> Map(terminalId -> terminal)
     this.terminalSockets = new Map(); // terminalId -> Set of sockets
     this.terminalHistory = new Map(); // terminalId -> command history
+    
+    // Render-specific configuration
+    this.isRenderDeployment = process.env.RENDER_DEPLOYMENT === 'true';
+    this.maxTerminalsPerSession = parseInt(process.env.MAX_TERMINALS_PER_SESSION) || (this.isRenderDeployment ? 3 : 10);
+    this.terminalTimeoutMs = parseInt(process.env.TERMINAL_TIMEOUT_MS) || (this.isRenderDeployment ? 1800000 : 3600000); // 30 min on Render, 1 hour locally
+    
+    if (this.isRenderDeployment) {
+      console.log('🚀 Running on Render - Terminal limits applied:');
+      console.log(`   Max terminals per session: ${this.maxTerminalsPerSession}`);
+      
+      // Start cleanup interval for Render
+      this.startTerminalCleanup();
+    }
+  }
+
+  startTerminalCleanup() {
+    // Clean up inactive terminals every 5 minutes on Render
+    setInterval(() => {
+      this.cleanupInactiveTerminals();
+    }, 5 * 60 * 1000);
+  }
+
+  cleanupInactiveTerminals() {
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const [sessionId, sessionTerminals] of this.terminals.entries()) {
+      for (const [terminalId, terminalInfo] of sessionTerminals.entries()) {
+        const lastActivity = terminalInfo.lastActivity || terminalInfo.createdAt || now;
+        
+        if (now - lastActivity > this.terminalTimeoutMs) {
+          console.log(`🧹 Cleaning up inactive terminal: ${terminalId}`);
+          this.destroyTerminal(sessionId, terminalId);
+          cleanedCount++;
+        }
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log(`🧹 Cleaned up ${cleanedCount} inactive terminals`);
+    }
   }
 
   createTerminal(sessionId, terminalId, shellType, workspaceDir, socket) {
@@ -17,36 +58,49 @@ class TerminalService {
 
     const sessionTerminals = this.terminals.get(sessionId);
     
+    // Check terminal limit per session (especially important on Render)
+    if (sessionTerminals.size >= this.maxTerminalsPerSession) {
+      throw new Error(`Maximum number of terminals (${this.maxTerminalsPerSession}) reached for this session`);
+    }
+    
     // Don't create if already exists, just add socket
     if (sessionTerminals.has(terminalId)) {
       this.addSocketToTerminal(terminalId, socket);
       return sessionTerminals.get(terminalId);
     }
 
-    // Determine shell command
+    // Determine shell command (adapt for Render's Linux environment)
     const shellCommand = this.getShellCommand(shellType);
     
     console.log(`🖥️ Creating terminal: ${terminalId} with ${shellType} in ${workspaceDir}`);
     
     try {
-      // Create terminal process
+      // Create terminal process with Render-optimized environment
       const terminal = spawn(shellCommand.command, shellCommand.args, {
         cwd: workspaceDir,
         env: {
           ...process.env,
           TERM: 'xterm-color',
-          COLORTERM: 'truecolor'
+          COLORTERM: 'truecolor',
+          // Render-specific environment variables
+          ...(this.isRenderDeployment && {
+            HOME: workspaceDir,
+            USER: 'render',
+            SHELL: '/bin/bash'
+          })
         },
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      // Store terminal info
+      // Store terminal info with timestamps for cleanup
       const terminalInfo = {
         process: terminal,
         id: terminalId,
         shellType,
         workspaceDir,
-        isActive: true
+        isActive: true,
+        createdAt: Date.now(),
+        lastActivity: Date.now()
       };
 
       sessionTerminals.set(terminalId, terminalInfo);
@@ -55,6 +109,7 @@ class TerminalService {
 
       // Handle stdout
       terminal.stdout.on('data', (data) => {
+        terminalInfo.lastActivity = Date.now(); // Update activity timestamp
         const output = data.toString();
         const sockets = this.terminalSockets.get(terminalId);
         if (sockets) {
@@ -66,6 +121,7 @@ class TerminalService {
 
       // Handle stderr
       terminal.stderr.on('data', (data) => {
+        terminalInfo.lastActivity = Date.now(); // Update activity timestamp
         const output = data.toString();
         const sockets = this.terminalSockets.get(terminalId);
         if (sockets) {
@@ -98,6 +154,43 @@ class TerminalService {
           });
         }
       });
+
+      // Send initial commands to show working directory and session info
+      setTimeout(() => {
+        if (terminalInfo.isActive && terminal.stdin.writable) {
+          const platform = os.platform();
+          let initCommands = [];
+          
+          // Minimal initialization - just set working directory
+          if (this.isRenderDeployment || platform === 'linux') {
+            initCommands = [
+              `cd "${workspaceDir}"\r\n`
+            ];
+          } else if (shellType === 'cmd') {
+            initCommands = [
+              `cd /d "${workspaceDir}"\r\n`
+            ];
+          } else if (shellType === 'powershell') {
+            initCommands = [
+              `Set-Location "${workspaceDir}"\r\n`
+            ];
+          } else {
+            // bash, python, node
+            initCommands = [
+              `cd "${workspaceDir}"\r\n`
+            ];
+          }
+          
+          // Send commands quickly
+          initCommands.forEach((cmd, index) => {
+            setTimeout(() => {
+              if (terminalInfo.isActive && terminal.stdin.writable) {
+                terminal.stdin.write(cmd);
+              }
+            }, index * 50);
+          });
+        }
+      }, 300); // Reduced wait time
 
       return terminalInfo;
     } catch (error) {
@@ -148,29 +241,37 @@ class TerminalService {
     return shells[shellType];
   }
 
+  destroyTerminal(sessionId, terminalId) {
+    const sessionTerminals = this.terminals.get(sessionId);
+    if (sessionTerminals && sessionTerminals.has(terminalId)) {
+      const terminalInfo = sessionTerminals.get(terminalId);
+      
+      // Kill the process
+      if (terminalInfo.process && !terminalInfo.process.killed) {
+        terminalInfo.process.kill('SIGTERM');
+      }
+      
+      // Clean up maps
+      sessionTerminals.delete(terminalId);
+      this.terminalSockets.delete(terminalId);
+      this.terminalHistory.delete(terminalId);
+      
+      // Remove empty session maps
+      if (sessionTerminals.size === 0) {
+        this.terminals.delete(sessionId);
+      }
+      
+      console.log(`🗑️ Terminal ${terminalId} destroyed`);
+    }
+  }
+
   writeToTerminal(sessionId, terminalId, data) {
     const sessionTerminals = this.terminals.get(sessionId);
     if (sessionTerminals && sessionTerminals.has(terminalId)) {
       const terminalInfo = sessionTerminals.get(terminalId);
       if (terminalInfo.isActive && terminalInfo.process.stdin.writable) {
+        terminalInfo.lastActivity = Date.now(); // Update activity timestamp
         terminalInfo.process.stdin.write(data);
-        
-        // Store command in history if it's a complete command
-        if (data.includes('\r') || data.includes('\n')) {
-          const history = this.terminalHistory.get(terminalId) || [];
-          const command = data.trim();
-          if (command && !command.startsWith('\x1b')) { // Ignore escape sequences
-            history.push({
-              command,
-              timestamp: new Date()
-            });
-            // Keep only last 100 commands
-            if (history.length > 100) {
-              history.shift();
-            }
-            this.terminalHistory.set(terminalId, history);
-          }
-        }
       }
     }
   }
@@ -187,27 +288,6 @@ class TerminalService {
 
   clearTerminalHistory(terminalId) {
     this.terminalHistory.set(terminalId, []);
-  }
-
-  removeTerminal(sessionId, terminalId) {
-    const sessionTerminals = this.terminals.get(sessionId);
-    if (sessionTerminals && sessionTerminals.has(terminalId)) {
-      const terminalInfo = sessionTerminals.get(terminalId);
-      
-      // Kill the process
-      if (terminalInfo.process && !terminalInfo.process.killed) {
-        terminalInfo.process.kill('SIGTERM');
-      }
-      
-      sessionTerminals.delete(terminalId);
-      this.terminalSockets.delete(terminalId);
-      this.terminalHistory.delete(terminalId);
-      
-      // Clean up session if no terminals left
-      if (sessionTerminals.size === 0) {
-        this.terminals.delete(sessionId);
-      }
-    }
   }
 
   cleanupSession(sessionId) {
@@ -253,51 +333,6 @@ class TerminalService {
     return total;
   }
 
-  // Execute a single command (alternative to interactive terminal)
-  async executeCommand(sessionId, command, workspaceDir) {
-    return new Promise((resolve, reject) => {
-      const platform = os.platform();
-      const shellCommand = platform === 'win32' ? 'cmd.exe' : 'bash';
-      const shellArgs = platform === 'win32' ? ['/c', command] : ['-c', command];
-
-      const process = spawn(shellCommand, shellArgs, {
-        cwd: workspaceDir,
-        env: process.env
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      process.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      process.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      process.on('exit', (exitCode) => {
-        resolve({
-          exitCode,
-          stdout,
-          stderr,
-          command
-        });
-      });
-
-      process.on('error', (error) => {
-        reject(error);
-      });
-
-      // Set timeout to prevent hanging
-      setTimeout(() => {
-        if (!process.killed) {
-          process.kill('SIGTERM');
-          reject(new Error('Command execution timeout'));
-        }
-      }, 30000); // 30 second timeout
-    });
-  }
 }
 
 module.exports = new TerminalService();

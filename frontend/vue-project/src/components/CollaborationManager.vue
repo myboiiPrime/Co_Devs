@@ -77,7 +77,7 @@
             <div class="participants-list">
               <div 
                 v-for="participant in participants" 
-                :key="participant.id"
+                :key="participant.id || participant._id"
                 class="participant-item"
                 :class="{ 
                   owner: participant.isOwner, 
@@ -86,10 +86,10 @@
                 }"
               >
                 <div class="participant-avatar">
-                  {{ participant.username.charAt(0).toUpperCase() }}
+                  {{ getParticipantUsername(participant).charAt(0).toUpperCase() }}
                 </div>
                 <div class="participant-info">
-                  <span class="participant-name">{{ participant.username }}</span>
+                  <span class="participant-name">{{ getParticipantUsername(participant) }}</span>
                   <span class="participant-status">
                     {{ participant.isOwner ? 'Owner' : 'Member' }}
                     {{ !participant.isOnline ? '(Offline)' : '' }}
@@ -133,9 +133,23 @@
                 <span class="detail-label">Owner:</span>
                 <span class="detail-value">{{ sessionData.owner?.username || 'Unknown' }}</span>
               </div>
-              <button @click="leaveSession" class="leave-session-btn">
-                Leave Session
-              </button>
+              <div class="detail-item">
+                <span class="detail-label">Lifetime:</span>
+                <span class="detail-value session-lifetime">{{ sessionLifetime }}</span>
+              </div>
+              <div class="session-actions">
+                <button @click="leaveSession" class="leave-session-btn">
+                  Leave Session
+                </button>
+                <button 
+                  v-if="isSessionOwner" 
+                  @click="deleteSession" 
+                  class="delete-session-btn"
+                  :disabled="isDeletingSession"
+                >
+                  {{ isDeletingSession ? 'Deleting...' : 'Delete Session' }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -170,16 +184,16 @@
                 <div class="participants-header">Current Participants:</div>
                 <div 
                   v-for="participant in participants" 
-                  :key="participant.username"
+                  :key="getParticipantUsername(participant)"
                   class="participant-item"
                 >
                   <div class="participant-info">
-                    <span class="participant-name">{{ participant.username }}</span>
+                    <span class="participant-name">{{ getParticipantUsername(participant) }}</span>
                     <span class="participant-role">{{ participant.role }}</span>
                   </div>
                   <button 
-                    v-if="participant.username !== currentUsername && participant.role !== 'owner'"
-                    @click="removeUser(participant.username)"
+                    v-if="getParticipantUsername(participant) !== currentUsername && participant.role !== 'owner'"
+                    @click="removeUser(getParticipantUsername(participant))"
                     class="remove-user-btn"
                     :disabled="isRemovingUser"
                   >
@@ -230,29 +244,35 @@
           </div>
         </div>
         <div class="editor-content">
-          <CodeEditor 
-            v-if="selectedFile && activeTab === 'editor'"
-            v-model="fileContent"
-            :language="getFileLanguage(selectedFile.name)"
-            :documentId="selectedFile.path"
-            @change="handleFileContentChange"
-            @ai-request="handleAiRequest"
-            @selection-change="handleSelectionChange"
-            class="code-editor-component"
-          />
-          <Terminal 
-            v-if="activeTab === 'terminal'"
-            :sessionId="sessionId"
-            :socket="socket"
-            @error="handleError"
-            class="terminal-component"
-          />
+          <keep-alive>
+            <CodeEditor 
+              v-if="selectedFile && activeTab === 'editor'"
+              v-model="fileContent"
+              :language="getFileLanguage(selectedFile.name)"
+              :documentId="selectedFile.path"
+              @change="handleFileContentChange"
+              @cursor-change="handleCursorChange"
+              @ai-request="handleAiRequest"
+              @selection-change="handleSelectionChange"
+              class="code-editor-component"
+            />
+          </keep-alive>
+          <keep-alive>
+            <Terminal 
+              v-if="activeTab === 'terminal'"
+              :sessionId="sessionId"
+              :socket="socket"
+              @error="handleError"
+              class="terminal-component"
+            />
+          </keep-alive>
         </div>
       </div>
     </div>
 
     <!-- AI Assistant Panel (Right) -->
     <AiAssistant
+      v-if="!chatVisible"
       :selectedCode="selectedCode"
       :hasSelection="hasSelection"
       :currentLanguage="currentLanguage"
@@ -260,6 +280,42 @@
       @insert-code="handleInsertCode"
       class="ai-panel"
     />
+
+    <!-- Session Chat Panel (Right) -->
+    <SessionChat
+      v-if="chatVisible"
+      :sessionId="sessionId"
+      :socket="socket"
+      :currentUserId="currentUserId"
+      :currentUsername="currentUsername"
+      :participants="participants"
+      @toggle-chat="toggleChat"
+      class="chat-panel"
+    />
+
+    <!-- Panel Toggle Button -->
+    <div class="panel-toggle">
+      <button 
+        @click="toggleChat" 
+        class="toggle-btn"
+        :class="{ active: chatVisible }"
+        title="Toggle Chat"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2.678 11.894a1 1 0 0 1 .287.801 10.97 10.97 0 0 1-.398 2c1.395-.323 2.247-.697 2.634-.893a1 1 0 0 1 .71-.074A8.06 8.06 0 0 0 8 14c3.996 0 7-2.807 7-6 0-3.192-3.004-6-7-6S1 4.808 1 8c0 1.468.617 2.83 1.678 3.894zm-.493 3.905a21.682 21.682 0 0 1-.713.129c-.2.032-.352-.176-.273-.362a9.68 9.68 0 0 0 .244-.637l.003-.01c.248-.72.45-1.548.524-2.319C.743 11.37 0 9.76 0 8c0-3.866 3.582-7 8-7s8 3.134 8 7-3.582 7-8 7a9.06 9.06 0 0 1-2.347-.306c-.52.263-1.639.742-3.468 1.105z"/>
+        </svg>
+      </button>
+      <button 
+        @click="toggleChat" 
+        class="toggle-btn"
+        :class="{ active: !chatVisible }"
+        title="Toggle AI Assistant"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/>
+        </svg>
+      </button>
+    </div>
 
     <!-- Status Bar (Bottom) -->
     <div class="status-bar">
@@ -308,6 +364,7 @@ import Terminal from './Terminal.vue'
 import FileTree from './FileTree.vue'
 import CodeEditor from './CodeEditor.vue'
 import AiAssistant from './AiAssistant.vue'
+import SessionChat from './SessionChat.vue'
 import { buildApiUrl } from '@/config/api.js'
 
 export default {
@@ -316,7 +373,8 @@ export default {
     Terminal,
     FileTree,
     CodeEditor,
-    AiAssistant
+    AiAssistant,
+    SessionChat
   },
   props: {
     sessionId: {
@@ -328,6 +386,10 @@ export default {
       required: true
     },
     currentUserId: {
+      type: String,
+      required: true
+    },
+    currentUsername: {
       type: String,
       required: true
     }
@@ -345,12 +407,15 @@ export default {
       newUsername: '',
       isAddingUser: false,
       isRemovingUser: false,
+      isDeletingSession: false,
       userManagementError: '',
       userManagementSuccess: '',
-      currentUsername: '',
       selectedCode: '',
       hasSelection: false,
-      currentLanguage: 'javascript'
+      currentLanguage: 'javascript',
+      otherUsersCursors: [],
+      chatVisible: false,
+      currentTime: new Date() // Add current time for real-time updates
     }
   },
   computed: {
@@ -365,16 +430,60 @@ export default {
     },
     isSessionOwner() {
       return this.sessionData.owner?.username === this.currentUsername
+    },
+    sessionLifetime() {
+      if (!this.sessionData.createdAt) return 'Unknown'
+      
+      const createdAt = new Date(this.sessionData.createdAt)
+      const now = this.currentTime
+      const diffMs = now - createdAt
+      
+      if (diffMs < 0) return 'Unknown'
+      
+      const diffSeconds = Math.floor(diffMs / 1000)
+      const diffMinutes = Math.floor(diffSeconds / 60)
+      const diffHours = Math.floor(diffMinutes / 60)
+      const diffDays = Math.floor(diffHours / 24)
+      
+      if (diffDays > 0) {
+        return `${diffDays}d ${diffHours % 24}h ${diffMinutes % 60}m`
+      } else if (diffHours > 0) {
+        return `${diffHours}h ${diffMinutes % 60}m ${diffSeconds % 60}s`
+      } else if (diffMinutes > 0) {
+        return `${diffMinutes}m ${diffSeconds % 60}s`
+      } else {
+        return `${diffSeconds}s`
+      }
     }
   },
   mounted() {
     this.setupSocketListeners()
     this.joinSession()
-    // Get current username from route query or props
-    this.currentUsername = this.$route.query.username || this.currentUserId || 'Anonymous'
+    
+    // Update current time every second for real-time lifetime display
+    this.timeInterval = setInterval(() => {
+      this.currentTime = new Date()
+    }, 1000)
+    
+    // Set a timeout to detect if session-joined event is never received
+    this.joinTimeout = setTimeout(() => {
+      if (!this.sessionData.sessionId) {
+        console.error('❌ FRONTEND: Session join timeout - no session data received')
+        this.addNotification({
+          type: 'error',
+          message: 'Failed to join session - timeout. Please check backend connection.'
+        })
+      }
+    }, 10000) // 10 second timeout
   },
   beforeUnmount() {
     this.cleanup()
+    if (this.timeInterval) {
+      clearInterval(this.timeInterval)
+    }
+    if (this.joinTimeout) {
+      clearTimeout(this.joinTimeout)
+    }
   },
   methods: {
     setActiveView(view) {
@@ -419,24 +528,115 @@ export default {
       this.socket.on('collaboration-notification', this.handleCollaborationNotification)
       this.socket.on('fs-read-result', this.handleFileReadResult)
       this.socket.on('fs-write-result', this.handleFileWriteResult)
+      this.socket.on('cursor-moved', this.handleCursorMoved)
       this.socket.on('error', this.handleError)
+      this.socket.on('test-response', (data) => {
+        console.log('🧪 FRONTEND: Received test response from backend:', data)
+      })
     },
 
     joinSession() {
+      console.log('🐛 FRONTEND: Attempting to join session:', this.sessionId)
+      console.log('🐛 FRONTEND: Socket exists:', !!this.socket)
+      console.log('🐛 FRONTEND: Socket connected:', this.socket?.connected)
+      console.log('🐛 FRONTEND: Socket ID:', this.socket?.id)
+      
+      if (!this.socket) {
+        console.error('❌ FRONTEND: No socket available!')
+        this.addNotification({
+          type: 'error',
+          message: 'Connection error: No socket available'
+        })
+        return
+      }
+
+      // If socket is not connected, wait for connection
+      if (!this.socket.connected) {
+        console.log('🐛 FRONTEND: Socket not connected, waiting for connection...')
+        
+        // Set up a one-time listener for connection
+        const onConnect = () => {
+          console.log('🐛 FRONTEND: Socket connected, now joining session')
+          this.socket.off('connect', onConnect) // Remove listener
+          this.performJoinSession()
+        }
+        
+        this.socket.on('connect', onConnect)
+        
+        // Also try to connect if not already connecting
+        if (!this.socket.connecting) {
+          console.log('🐛 FRONTEND: Attempting to connect socket...')
+          this.socket.connect()
+        }
+        
+        return
+      }
+      
+      // Socket is already connected, join immediately
+      this.performJoinSession()
+    },
+
+    performJoinSession() {
+      console.log('🐛 FRONTEND: Performing join session with connected socket')
+      console.log('🐛 FRONTEND: Socket ID:', this.socket.id)
+      
+      // Test socket communication first
+      console.log('🧪 FRONTEND: Testing socket communication...')
+      this.socket.emit('test-event', { message: 'Frontend test', timestamp: Date.now() })
+      
       this.socket.emit('join-collaboration', { sessionId: this.sessionId })
+      console.log('🐛 FRONTEND: Emitted join-collaboration event with sessionId:', this.sessionId)
     },
 
     handleSessionJoined(data) {
-      this.sessionData = data.session
+      console.log('🐛 FRONTEND: Received session-joined data:', data)
+      console.log('🐛 FRONTEND: Data type:', typeof data)
+      console.log('🐛 FRONTEND: Data keys:', Object.keys(data || {}))
+      console.log('🐛 FRONTEND: Session data:', data?.session)
+      console.log('🐛 FRONTEND: Session data type:', typeof data?.session)
+      console.log('🐛 FRONTEND: Session keys:', Object.keys(data?.session || {}))
+      console.log('🐛 FRONTEND: Session owner:', data?.session?.owner)
+      console.log('🐛 FRONTEND: Session createdAt:', data?.session?.createdAt)
+      console.log('🐛 FRONTEND: Session sessionId:', data?.session?.sessionId)
+      console.log('🐛 FRONTEND: Participants data:', data?.participants)
+      
+      // Clear the join timeout since we received data
+      if (this.joinTimeout) {
+        clearTimeout(this.joinTimeout)
+        this.joinTimeout = null
+      }
+      
+      // Defensive data handling
+      if (data && data.session) {
+        this.sessionData = {
+          ...data.session,
+          // Ensure we have the basic fields
+          sessionId: data.session.sessionId || this.sessionId,
+          name: data.session.name || 'Collaboration Session',
+          owner: data.session.owner || null,
+          createdAt: data.session.createdAt || null
+        }
+        console.log('🐛 FRONTEND: Updated sessionData:', this.sessionData)
+      } else {
+        console.error('❌ FRONTEND: Invalid session data received:', data)
+        this.addNotification({
+          type: 'error',
+          message: 'Failed to load session data'
+        })
+        return
+      }
+      
       this.participants = data.participants || []
       
       this.addNotification({
         type: 'success',
-        message: `Joined collaboration session: ${data.session.name}`
+        message: `Joined collaboration session: ${this.sessionData.name}`
       })
     },
 
     handleUserJoined(data) {
+      console.log('🐛 FRONTEND: User joined:', data)
+      
       const existingIndex = this.participants.findIndex(p => p.id === data.user.id)
       if (existingIndex === -1) {
         this.participants.push({
@@ -445,6 +645,15 @@ export default {
         })
       } else {
         this.participants[existingIndex].isOnline = true
+      }
+
+      // If session update info is provided (e.g., owner joining), update session data
+      if (data.sessionUpdate) {
+        this.sessionData = {
+          ...this.sessionData,
+          ...data.sessionUpdate
+        }
+        console.log('🐛 FRONTEND: Updated session data from user join:', this.sessionData)
       }
 
       this.addNotification({
@@ -577,6 +786,49 @@ export default {
       this.addNotification(notification)
     },
 
+    handleCursorChange(cursorData) {
+      // Send cursor position to other users via socket
+      if (this.selectedFile && this.socket) {
+        this.socket.emit('cursor-position', {
+          documentId: this.selectedFile.path,
+          position: {
+            lineNumber: cursorData.lineNumber,
+            column: cursorData.column
+          }
+        })
+      }
+    },
+
+    handleCursorMoved(data) {
+      // Handle cursor movements from other users
+      const { user, position } = data
+      
+      // Update or add cursor position for this user
+      const existingIndex = this.otherUsersCursors.findIndex(cursor => cursor.userId === user.id)
+      
+      if (existingIndex >= 0) {
+        this.otherUsersCursors[existingIndex] = {
+          userId: user.id,
+          username: user.username,
+          position: position,
+          timestamp: Date.now()
+        }
+      } else {
+        this.otherUsersCursors.push({
+          userId: user.id,
+          username: user.username,
+          position: position,
+          timestamp: Date.now()
+        })
+      }
+
+      // Remove old cursor positions (older than 30 seconds)
+      const now = Date.now()
+      this.otherUsersCursors = this.otherUsersCursors.filter(cursor => 
+        now - cursor.timestamp < 30000
+      )
+    },
+
     addNotification(notification) {
       const id = Date.now() + Math.random()
       this.notifications.push({
@@ -601,6 +853,48 @@ export default {
     leaveSession() {
       this.socket.emit('leave-collaboration', { sessionId: this.sessionId })
       this.$router.push('/')
+    },
+
+    async deleteSession() {
+      if (!confirm('Are you sure you want to delete this session? This action cannot be undone and will remove all session data.')) {
+        return
+      }
+
+      this.isDeletingSession = true
+
+      try {
+        const response = await fetch(buildApiUrl(`/api/collaboration/workspaces/${this.sessionId}/${this.currentUsername}`), {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to delete session')
+        }
+
+        this.addNotification({
+          type: 'success',
+          message: 'Session deleted successfully'
+        })
+
+        // Redirect to home after a short delay
+        setTimeout(() => {
+          this.$router.push('/')
+        }, 1500)
+
+      } catch (error) {
+        console.error('Delete session error:', error)
+        this.addNotification({
+          type: 'error',
+          message: error.message || 'Failed to delete session'
+        })
+      } finally {
+        this.isDeletingSession = false
+      }
     },
 
     async addUser() {
@@ -692,6 +986,15 @@ export default {
       }
     },
 
+    toggleChat() {
+      this.chatVisible = !this.chatVisible
+    },
+
+    getParticipantUsername(participant) {
+      // Handle both direct username and nested user.username structures
+      return participant.username || participant.user?.username || 'Unknown'
+    },
+
     cleanup() {
       if (this.socket) {
         this.socket.off('session-joined')
@@ -701,6 +1004,7 @@ export default {
         this.socket.off('collaboration-notification')
         this.socket.off('fs-read-result')
         this.socket.off('fs-write-result')
+        this.socket.off('cursor-moved')
         this.socket.off('error')
       }
     }
@@ -711,18 +1015,6 @@ export default {
 <style scoped>
 /* VS Code Theme Colors */
 .vscode-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100%;
-  background: #1e1e1e;
-  color: #cccccc;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-size: 13px;
-}
-
-/* Main layout container */
-.vscode-container {
   display: grid;
   grid-template-columns: 48px auto 1fr 350px;
   grid-template-rows: 1fr 22px;
@@ -730,11 +1022,15 @@ export default {
     "activity sidebar main ai"
     "status status status status";
   height: 100vh;
-  width: 100%;
+  width: 100vw;
   background: #1e1e1e;
   color: #cccccc;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 13px;
+  overflow: hidden; /* Prevent scrollbars on main container */
+  position: fixed; /* Ensure it takes full viewport */
+  top: 0;
+  left: 0;
 }
 
 /* Activity Bar */
@@ -744,6 +1040,7 @@ export default {
   display: flex;
   flex-direction: column;
   border-right: 1px solid #2d2d2d;
+  overflow: hidden; /* No scrollbar needed */
 }
 
 .activity-item {
@@ -784,6 +1081,7 @@ export default {
   border-right: 1px solid #2d2d2d;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* Prevent sidebar container from scrolling */
 }
 
 .sidebar-header {
@@ -831,7 +1129,9 @@ export default {
 
 .sidebar-content {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: auto; /* Only sidebar content should scroll */
+  overflow-x: hidden;
+  min-height: 0; /* Important for proper flex behavior */
 }
 
 /* Section Styling */
@@ -1025,20 +1325,41 @@ export default {
   padding: 8px 16px;
 }
 
+.session-lifetime {
+  color: #4ec9b0 !important;
+  font-weight: 500;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
 .detail-item {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 12px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #2d2d30;
+}
+
+.detail-item:last-child {
+  border-bottom: none;
 }
 
 .detail-label {
   color: #858585;
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .detail-value {
   color: #cccccc;
-  font-family: monospace;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.session-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .leave-session-btn {
@@ -1050,12 +1371,32 @@ export default {
   border-radius: 3px;
   cursor: pointer;
   font-size: 12px;
-  margin-top: 16px;
   transition: background 0.2s ease;
 }
 
 .leave-session-btn:hover {
   background: #cb2431;
+}
+
+.delete-session-btn {
+  width: 100%;
+  padding: 8px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.delete-session-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.delete-session-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
 }
 
 /* Main Content */
@@ -1064,8 +1405,8 @@ export default {
   display: flex;
   flex-direction: column;
   background: #1e1e1e;
-  min-width: 0;
-  overflow: hidden;
+  overflow: hidden; /* Prevent main content from scrolling */
+  min-width: 0; /* Important for grid items */
 }
 
 /* Title Bar */
@@ -1074,9 +1415,10 @@ export default {
   background: #2d2d2d;
   border-bottom: 1px solid #3e3e3e;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   padding: 0 16px;
+  flex-shrink: 0; /* Don't shrink */
 }
 
 .title-bar-left {
@@ -1128,10 +1470,10 @@ export default {
 /* Editor Area */
 .editor-area {
   flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  min-height: 0; /* Important for proper flex behavior */
+  overflow: hidden; /* Prevent editor area from scrolling */
 }
 
 .editor-tabs {
@@ -1141,6 +1483,10 @@ export default {
   display: flex;
   align-items: center;
   padding: 0 8px;
+  gap: 4px;
+  flex-shrink: 0; /* Don't shrink */
+  overflow-x: auto; /* Allow horizontal scrolling for tabs if needed */
+  overflow-y: hidden;
 }
 
 .tab {
@@ -1187,23 +1533,76 @@ export default {
 .editor-content {
   flex: 1;
   min-width: 0;
+  min-height: 0; /* Important for proper flex behavior */
   background: #1e1e1e;
   width: 100%;
+  overflow: hidden; /* Let child components handle their own scrolling */
 }
 
 .code-editor-component {
   height: 100%;
   width: 100%;
+  overflow: hidden; /* CodeEditor handles its own scrolling */
 }
 
 .terminal-component {
   height: 100%;
+  overflow: hidden; /* Terminal handles its own scrolling */
 }
 
 /* AI Assistant Panel */
 .ai-panel {
   grid-area: ai;
+  background: #252526;
   border-left: 1px solid #2d2d2d;
+  overflow: hidden;
+}
+
+/* Chat Panel */
+.chat-panel {
+  grid-area: ai;
+  background: #252526;
+  border-left: 1px solid #2d2d2d;
+  overflow: hidden;
+}
+
+/* Panel Toggle Button */
+.panel-toggle {
+  position: fixed;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 1000;
+}
+
+.toggle-btn {
+  width: 40px;
+  height: 40px;
+  background: #2d2d2d;
+  border: 1px solid #3e3e3e;
+  border-radius: 6px;
+  color: #858585;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-btn:hover {
+  background: #3e3e3e;
+  color: #cccccc;
+  border-color: #007acc;
+}
+
+.toggle-btn.active {
+  background: #007acc;
+  color: white;
+  border-color: #007acc;
 }
 
 /* Status Bar (Bottom) */
@@ -1217,6 +1616,8 @@ export default {
   align-items: center;
   padding: 0 16px;
   font-size: 12px;
+  flex-shrink: 0; /* Don't shrink */
+  overflow: hidden; /* No scrolling needed */
 }
 
 .status-left,

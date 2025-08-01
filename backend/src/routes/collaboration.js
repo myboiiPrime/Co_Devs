@@ -56,7 +56,7 @@ function welcomeMessage() {
 }
 
 // Try editing this file with multiple users to see the magic happen!
-// Use the terminal below to run your code and see the results.
+// Use the terminal below for development tasks.
 
 welcomeMessage();
 `,
@@ -86,14 +86,16 @@ welcomeMessage();
         joinedAt: new Date()
       }],
       documentId: document._id,
-      workspaceDir: workspaceDir, // Added missing workspaceDir field
+      workspaceDir: workspaceDir,
       isActive: true,
       settings: {
+        maxTerminals: 5,
+        allowedShells: ['bash', 'cmd', 'powershell', 'python', 'node'],
+        fileSystemAccess: true,
         maxParticipants: 10,
         allowAnonymous: true,
         permissions: {
           canEdit: true,
-          canExecute: true,
           canManageFiles: true
         }
       },
@@ -526,15 +528,7 @@ router.delete('/:sessionId', auth, async (req, res) => {
     }
 
     // Only owner can end the session
-    if (session.owner.toString() !== req.user.userId) {
-      return res.status(403).json({ error: 'Only session owner can end the session' });
-    }
-
-    // Cleanup terminals
     terminalService.cleanupSession(session.sessionId);
-    
-    // Cleanup workspace
-    await workspaceService.cleanupWorkspace(session.sessionId);
     
     // Mark session as inactive
     session.isActive = false;
@@ -548,7 +542,6 @@ router.delete('/:sessionId', auth, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // List workspaces for a user (no auth required for now - using username)
 router.get('/workspaces/:username', async (req, res) => {
   try {
@@ -586,14 +579,14 @@ router.get('/workspaces/:username', async (req, res) => {
 
       return {
         sessionId: session.sessionId,
-        name: session.name,
-        description: session.description,
+        name: session.documentId?.title || 'Untitled Workspace',
+        description: `${session.documentId?.language || 'Mixed'} collaborative workspace`,
         owner: session.owner.username,
         isOwner,
         isActive: session.isActive,
         participantCount: session.participants.length,
         language: session.documentId?.language || 'javascript',
-        createdAt: session.createdAt.toISOString(),
+        createdAt: session.createdAt,
         participants
       };
     });
@@ -601,6 +594,52 @@ router.get('/workspaces/:username', async (req, res) => {
     res.json({ workspaces });
   } catch (error) {
     console.error('List workspaces error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete workspace/session (owner only, no auth required - using username)
+router.delete('/workspaces/:sessionId/:username', async (req, res) => {
+  try {
+    const { sessionId, username } = req.params;
+    
+    if (!sessionId || !username) {
+      return res.status(400).json({ error: 'Session ID and username are required' });
+    }
+
+    // Find user
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find session
+    const session = await CollaborationSession.findOne({ sessionId })
+      .populate('owner', 'username');
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Check if user is the owner
+    if (session.owner._id.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Only session owner can delete the session' });
+    }
+
+    // Cleanup terminals
+    terminalService.cleanupSession(session.sessionId);
+    
+    // Cleanup workspace
+    await workspaceService.cleanupWorkspace(session.sessionId);
+    
+    // Delete the session completely
+    await CollaborationSession.findByIdAndDelete(session._id);
+
+    res.json({
+      message: 'Session deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete session error:', error);
     res.status(500).json({ error: error.message });
   }
 });

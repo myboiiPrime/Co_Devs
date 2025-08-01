@@ -81,6 +81,43 @@ class WorkspaceService {
       throw new Error(error.message || 'Failed to create workspace');
     }
   }
+
+  async deleteWorkspace(sessionId, username) {
+    try {
+      if (!sessionId || !username) {
+        throw new Error('Session ID and username are required');
+      }
+
+      const response = await this.api.delete(`/collaboration/workspaces/${sessionId}/${username}`);
+      
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (error) {
+      console.error('Error deleting workspace:', error);
+      
+      // Provide more specific error messages
+      if (error.code === 'ECONNREFUSED' || error.code === 'NETWORK_ERROR') {
+        throw new Error('Cannot connect to server. Please check if the backend is running.');
+      }
+      
+      if (error.response?.status === 403) {
+        throw new Error('Only the workspace owner can delete this workspace');
+      }
+      
+      if (error.response?.status === 404) {
+        throw new Error('Workspace not found');
+      }
+      
+      if (error.response?.status === 500) {
+        throw new Error('Server error occurred while deleting workspace');
+      }
+      
+      throw new Error(error.message || 'Failed to delete workspace');
+    }
+  }
 }
 
 export default new WorkspaceService();

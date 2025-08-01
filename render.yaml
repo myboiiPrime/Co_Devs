@@ -6,6 +6,12 @@ services:
     plan: free
     buildCommand: cd backend && npm install
     startCommand: cd backend && npm start
+    # Force single instance to prevent WebSocket room splitting
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+    # Add health check for better reliability
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -22,6 +28,13 @@ services:
           type: web
           name: collaborative-ide-frontend
           property: url
+      # Add Render-specific environment detection
+      - key: RENDER_DEPLOYMENT
+        value: "true"
+      - key: MAX_TERMINALS_PER_SESSION
+        value: "3"
+      - key: TERMINAL_TIMEOUT_MS
+        value: "1800000"  # 30 minutes
 
   # Frontend Static Site
   - type: web

@@ -135,28 +135,24 @@ const sendMessage = async () => {
   isTyping.value = true
   
   try {
-    // For now, we'll use the generate endpoint as a general chat endpoint
-    // since it can handle various types of requests and conversations
     const response = await aiService.generateCode(userMessage, props.currentLanguage)
     
-    // Check if the response looks like code (contains common code patterns)
-    const codePatterns = [
-      /function\s+\w+/,
-      /class\s+\w+/,
-      /def\s+\w+/,
-      /const\s+\w+\s*=/,
-      /let\s+\w+\s*=/,
-      /var\s+\w+\s*=/,
-      /<\w+.*>/,
-      /import\s+/,
-      /from\s+['"`]/
-    ]
+    // Check if response contains code blocks
+    const hasCodeBlock = response.includes('```')
     
-    const looksLikeCode = codePatterns.some(pattern => pattern.test(response))
-    
-    if (looksLikeCode) {
-      addMessage('assistant', 'Here\'s what I generated:', response, props.currentLanguage)
+    if (hasCodeBlock) {
+      // Extract code from ``` blocks for the code parameter
+      const codeBlockMatch = response.match(/```(?:\w+)?\s*([\s\S]*?)```/)
+      if (codeBlockMatch) {
+        const codeContent = codeBlockMatch[1].trim()
+        // Include full response as text AND extracted code as separate parameter
+        addMessage('assistant', response, codeContent, props.currentLanguage)
+      } else {
+        // Fallback if ``` format is malformed
+        addMessage('assistant', response)
+      }
     } else {
+      // No code blocks, treat as regular text
       addMessage('assistant', response)
     }
   } catch (error) {
@@ -302,18 +298,85 @@ watch(() => messages.value.length, () => {
   display: flex;
   flex-direction: column;
   height: calc(100% - 35px);
+  min-height: 0; /* Important for flex children to shrink */
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   background: #1e1e1e;
+  min-height: 0; /* Important for proper scrolling */
+  max-height: 100%; /* Ensure it doesn't exceed container */
+  /* Ensure scrollbar is always visible when needed */
+  scrollbar-width: thin;
+  scrollbar-color: #424242 #1e1e1e;
 }
 
+.chat-input {
+  flex-shrink: 0; /* Prevent input from shrinking */
+  border-top: 1px solid #3e3e3e;
+  background: #252526;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #3e3e3e;
+  background: #2d2d2d;
+  flex-shrink: 0;
+}
+
+.input-area {
+  display: flex;
+  padding: 12px;
+  gap: 8px;
+  align-items: flex-end;
+  background: #252526;
+  flex-shrink: 0;
+}
+
+/* Enhanced scrollbar styling */
+.chat-messages::-webkit-scrollbar {
+  width: 12px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #1e1e1e;
+  border-radius: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 6px;
+  border: 2px solid #1e1e1e;
+  min-height: 20px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+.chat-messages::-webkit-scrollbar-corner {
+  background: #1e1e1e;
+}
+
+/* Force scrollbar to always be visible */
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #424242;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
 .message {
   max-width: 85%;
 }
@@ -490,23 +553,5 @@ watch(() => messages.value.length, () => {
 .send-btn:disabled {
   background: #464647;
   cursor: not-allowed;
-}
-
-/* Scrollbar styling to match VS Code */
-.chat-messages::-webkit-scrollbar {
-  width: 10px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: #1e1e1e;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 5px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: #4f4f4f;
 }
 </style>

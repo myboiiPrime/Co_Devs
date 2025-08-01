@@ -143,6 +143,16 @@
               <span class="icon">🔗</span>
               Share
             </button>
+            <!-- Delete button - only visible to owner -->
+            <button 
+              v-if="workspace.isOwner"
+              @click="deleteWorkspace(workspace)"
+              class="btn-danger btn-small"
+              title="Delete workspace"
+            >
+              <span class="icon">🗑️</span>
+              Delete
+            </button>
           </div>
         </div>
       </div>
@@ -364,53 +374,24 @@ export default {
       this.loadWorkspaces()
     },
 
-    getFilteredCount(filterKey) {
-      switch (filterKey) {
-        case 'all':
-          return this.workspaces.length
-        case 'active':
-          return this.workspaces.filter(w => w.isActive).length
-        case 'owned':
-          return this.workspaces.filter(w => w.isOwner).length
-        case 'recent':
-          return this.workspaces.filter(w => this.isRecentlyUsed(w)).length
-        default:
-          return 0
+    async deleteWorkspace(workspace) {
+      if (!confirm(`Are you sure you want to delete "${workspace.name}"? This action cannot be undone.`)) {
+        return;
       }
-    },
 
-    isRecentlyUsed(workspace) {
-      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      return new Date(workspace.createdAt) > oneWeekAgo
-    },
-
-    formatDate(dateString) {
-      return new Date(dateString).toLocaleDateString()
-    },
-
-    shareWorkspace(workspace) {
-      const shareUrl = `${window.location.origin}/ide?session=${workspace.sessionId}`
-      navigator.clipboard.writeText(shareUrl)
-      this.addNotification('Share link copied to clipboard!', 'success')
-    },
-
-    resetNewWorkspace() {
-      this.newWorkspace = {
-        name: '',
-        description: '',
-        language: '',
-        createWorkspaceDir: true
+      try {
+        const username = localStorage.getItem('username') || 'current_user';
+        
+        await workspaceService.deleteWorkspace(workspace.sessionId, username);
+        
+        this.addNotification('Workspace deleted successfully!', 'success');
+        
+        // Refresh the workspace list
+        await this.loadWorkspaces();
+      } catch (error) {
+        console.error('Error deleting workspace:', error);
+        this.addNotification(`Error deleting workspace: ${error.message}`, 'error');
       }
-    },
-
-    addNotification(message, type = 'info') {
-      const notification = {
-        id: Date.now(),
-        message,
-        type
-      }
-      this.notifications.push(notification)
-      setTimeout(() => this.removeNotification(notification.id), 5000)
     },
 
     removeNotification(id) {
@@ -458,7 +439,7 @@ export default {
 }
 
 /* Buttons */
-.btn-primary, .btn-secondary {
+.btn-primary, .btn-secondary, .btn-danger {
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 8px;
@@ -488,6 +469,16 @@ export default {
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-danger {
+  background: #f44336;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #da190b;
+  transform: translateY(-2px);
 }
 
 .btn-small {
@@ -845,3 +836,12 @@ export default {
   }
 }
 </style>
+.btn-danger {
+  background: #f44336;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #da190b;
+  transform: translateY(-2px);
+}

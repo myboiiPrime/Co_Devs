@@ -39,7 +39,7 @@ class WorkspaceService {
     // Create README
     await fs.writeFile(
       path.join(workspaceDir, 'README.md'),
-      `# Collaboration Workspace\n\nWelcome to your shared coding environment!\n\n## Getting Started\n\n1. Use the terminal to run commands\n2. Edit files in the code editor\n3. Collaborate with your team in real-time\n\n## Project Structure\n\n- \`src/\` - Source code files\n- \`tests/\` - Test files\n- \`docs/\` - Documentation\n`
+      `# Collaboration Workspace\n\nWelcome to your shared coding environment!\n\n## Getting Started\n\n1. Use the terminal for development tasks\n2. Edit files in the code editor\n3. Collaborate with your team in real-time\n\n## Project Structure\n\n- \`src/\` - Source code files\n- \`tests/\` - Test files\n- \`docs/\` - Documentation\n`
     );
 
     // Create directory structure

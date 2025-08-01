@@ -9,7 +9,7 @@ export const apiConfig = {
       addUser: (sessionId) => `/api/collaboration/${sessionId}/add-user`,
       getSession: (sessionId) => `/api/collaboration/${sessionId}`,
       updateFile: (sessionId) => `/api/collaboration/${sessionId}/files`,
-      executeCommand: (sessionId) => `/api/collaboration/${sessionId}/execute`,
+
       getFiles: (sessionId) => `/api/collaboration/${sessionId}/files`,
       createFile: (sessionId) => `/api/collaboration/${sessionId}/files/create`,
       deleteFile: (sessionId) => `/api/collaboration/${sessionId}/files/delete`,
