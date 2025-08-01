@@ -59,6 +59,54 @@ export default {
       return
     }
 
+    // Validate authentication token and username (with graceful fallback)
+    const token = localStorage.getItem('token')
+    if (!token) {
+      console.warn('⚠️ FRONTEND: No authentication token found, proceeding with limited validation')
+    } else {
+      try {
+        // Try to validate username against authenticated user
+        const response = await fetch('/api/auth/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          const userData = result.user
+          
+          // Check if URL username matches authenticated user
+          if (userData.username !== this.currentUsername) {
+            console.error('❌ FRONTEND: Username mismatch - URL username does not match authenticated user', {
+              urlUsername: this.currentUsername,
+              authenticatedUsername: userData.username
+            })
+            
+            // Show warning but allow backend to handle final validation
+            const proceed = confirm(`Warning: You are trying to join as "${this.currentUsername}" but you are authenticated as "${userData.username}". This may indicate unauthorized access. Do you want to continue? (The server will perform additional validation)`)
+            
+            if (!proceed) {
+              this.$router.push('/')
+              return
+            }
+          } else {
+            console.log('✅ FRONTEND: Username validation passed:', { 
+              sessionId: this.sessionId, 
+              username: this.currentUsername,
+              authenticatedUser: userData.username
+            })
+          }
+        } else {
+          console.warn('⚠️ FRONTEND: Could not validate token, letting backend handle validation')
+        }
+
+      } catch (error) {
+        console.warn('⚠️ FRONTEND: Token validation error, proceeding with backend validation:', error.message)
+        // Don't block access - let the backend handle validation
+      }
+    }
+
     console.log('🐛 FRONTEND: IDEView mounted with params:', { sessionId: this.sessionId, username: this.currentUsername })
 
     // Create socket connection
@@ -72,6 +120,23 @@ export default {
     }
   },
   methods: {
+    // Simple JWT decoder (without verification - just for reading payload)
+    decodeJWT(token) {
+      try {
+        const parts = token.split('.')
+        if (parts.length !== 3) {
+          return null
+        }
+        
+        const payload = parts[1]
+        const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+        return JSON.parse(decoded)
+      } catch (error) {
+        console.error('JWT decode error:', error)
+        return null
+      }
+    },
+
     async initializeSocket() {
       try {
         this.connectionAttempts++
@@ -149,6 +214,12 @@ export default {
         this.socket.on('error', (error) => {
           console.error('❌ FRONTEND: Socket error:', error)
           this.loadingError = `Socket error: ${error.message || error}`
+        })
+
+        this.socket.on('join-error', (data) => {
+          console.error('❌ FRONTEND: Session join error:', data)
+          this.loadingError = data.error || 'Failed to join session. Access denied.'
+          this.socketConnected = false
         })
 
         // Set a timeout for socket connection

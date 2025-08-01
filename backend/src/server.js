@@ -14,10 +14,15 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
-// Dynamic CORS configuration
+// Dynamic CORS configuration - Production & Development friendly
 const getAllowedOrigins = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
   const clientUrl = process.env.CLIENT_URL;
-  const defaultOrigins = [
+  const additionalOrigins = process.env.ADDITIONAL_ORIGINS ? 
+    process.env.ADDITIONAL_ORIGINS.split(',').map(origin => origin.trim()) : [];
+  
+  // Development origins (only included in development)
+  const devOrigins = isProduction ? [] : [
     "http://localhost:3000", 
     "http://localhost:5173", 
     "http://localhost:5174",
@@ -25,11 +30,39 @@ const getAllowedOrigins = () => {
     "http://localhost:4173"
   ];
   
-  if (clientUrl && !defaultOrigins.includes(clientUrl)) {
-    return [...defaultOrigins, clientUrl];
+  // Production origins
+  const prodOrigins = [];
+  
+  // Add CLIENT_URL if provided
+  if (clientUrl) {
+    prodOrigins.push(clientUrl);
   }
   
-  return defaultOrigins;
+  // Add additional origins from environment
+  if (additionalOrigins.length > 0) {
+    prodOrigins.push(...additionalOrigins);
+  }
+  
+  // For Render deployment - auto-detect common patterns
+  if (isProduction && process.env.RENDER_DEPLOYMENT === 'true') {
+    // Add common Render patterns if not already included
+    const renderPatterns = [
+      'https://*.onrender.com',
+      'https://co-devs-front.onrender.com', // Your specific frontend
+      'https://co-devs.onrender.com' // Your specific backend (for self-requests)
+    ];
+    
+    renderPatterns.forEach(pattern => {
+      if (!prodOrigins.includes(pattern)) {
+        prodOrigins.push(pattern);
+      }
+    });
+  }
+  
+  const allOrigins = [...devOrigins, ...prodOrigins];
+  
+  // Remove duplicates
+  return [...new Set(allOrigins)];
 };
 
 const allowedOrigins = getAllowedOrigins();

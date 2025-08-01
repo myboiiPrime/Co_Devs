@@ -154,9 +154,32 @@ router.post('/:sessionId/join-simple', async (req, res) => {
       p.user.username === username
     );
 
+    // NEW: Additional email validation - check if user's email exists in participants
+    let emailValidationPassed = false;
     if (!isOwner && !isAllowedParticipant) {
+      // Find user by username to get their email
+      const userByUsername = await User.findOne({ username });
+      if (userByUsername) {
+        // Check if this user's email matches any participant's email
+        const participantEmails = await Promise.all(
+          session.participants.map(async (p) => {
+            const participantUser = await User.findById(p.user);
+            return participantUser ? participantUser.email : null;
+          })
+        );
+        
+        // Also check owner's email
+        const ownerUser = await User.findById(session.owner);
+        const ownerEmail = ownerUser ? ownerUser.email : null;
+        
+        emailValidationPassed = participantEmails.includes(userByUsername.email) || 
+                               (ownerEmail && ownerEmail === userByUsername.email);
+      }
+    }
+
+    if (!isOwner && !isAllowedParticipant && !emailValidationPassed) {
       return res.status(403).json({ 
-        error: 'Access denied. You are not authorized to join this session.',
+        error: 'Access denied. Your email is not authorized to join this session.',
         isOwner: false,
         allowedUsers: session.participants.map(p => p.user.username)
       });
@@ -228,6 +251,11 @@ router.get('/:sessionId/info', async (req, res) => {
 router.post('/:sessionId/add-user', async (req, res) => {
   try {
     const { username, ownerUsername } = req.body;
+    console.log('🔵 ADD USER: Starting add user process', {
+      sessionId: req.params.sessionId,
+      username,
+      ownerUsername
+    });
     
     if (!username || !ownerUsername) {
       return res.status(400).json({ error: 'Username and owner username are required' });
@@ -242,6 +270,16 @@ router.post('/:sessionId/add-user', async (req, res) => {
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
+
+    console.log('🔵 ADD USER: Session found', {
+      sessionId: session.sessionId,
+      owner: session.owner.username,
+      currentParticipants: session.participants.map(p => ({
+        username: p.user.username,
+        role: p.role,
+        userId: p.user._id
+      }))
+    });
 
     // Verify the requester is the session owner
     if (session.owner.username !== ownerUsername) {
@@ -260,34 +298,60 @@ router.post('/:sessionId/add-user', async (req, res) => {
     // Find or create user
     let user = await User.findOne({ username });
     if (!user) {
+      console.log('🔵 ADD USER: Creating new user', { username });
       user = new User({
         username,
-        email: `${username}@temp.local`,
+        email: `${username}@temp.com`,
         password: 'temppass123', // Fixed: Changed to meet 6+ character requirement
         isTemporary: true
       });
       await user.save();
+      console.log('🔵 ADD USER: New user created', { 
+        userId: user._id, 
+        username: user.username,
+        email: user.email 
+      });
+    } else {
+      console.log('🔵 ADD USER: Existing user found', { 
+        userId: user._id, 
+        username: user.username 
+      });
     }
 
     // Add user to session
     session.participants.push({
       user: user._id,
-      role: 'collaborator',
+      role: 'editor',
       joinedAt: new Date()
     });
 
     await session.save();
 
-    res.json({
-      message: `User ${username} added to session successfully`,
-      participants: session.participants.map(p => ({
+    // Re-populate to get fresh data
+    await session.populate('participants.user', 'username');
+
+    console.log('🔵 ADD USER: User added to session', {
+      newParticipants: session.participants.map(p => ({
         username: p.user.username,
         role: p.role,
-        joinedAt: p.joinedAt
+        userId: p.user._id
       }))
     });
+
+    const responseParticipants = session.participants.map(p => ({
+      username: p.user.username,
+      role: p.role,
+      joinedAt: p.joinedAt
+    }));
+
+    console.log('🔵 ADD USER: Sending response', { responseParticipants });
+
+    res.json({
+      message: `User ${username} added to session successfully`,
+      participants: responseParticipants
+    });
   } catch (error) {
-    console.error('Add user to session error:', error);
+    console.error('🔴 ADD USER ERROR:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -296,6 +360,11 @@ router.post('/:sessionId/add-user', async (req, res) => {
 router.post('/:sessionId/remove-user', async (req, res) => {
   try {
     const { username, ownerUsername } = req.body;
+    console.log('🔴 REMOVE USER: Starting remove user process', {
+      sessionId: req.params.sessionId,
+      username,
+      ownerUsername
+    });
     
     if (!username || !ownerUsername) {
       return res.status(400).json({ error: 'Username and owner username are required' });
@@ -311,6 +380,16 @@ router.post('/:sessionId/remove-user', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
+    console.log('🔴 REMOVE USER: Session found', {
+      sessionId: session.sessionId,
+      owner: session.owner.username,
+      currentParticipants: session.participants.map(p => ({
+        username: p.user.username,
+        role: p.role,
+        userId: p.user._id
+      }))
+    });
+
     // Verify the requester is the session owner
     if (session.owner.username !== ownerUsername) {
       return res.status(403).json({ error: 'Only session owner can remove users' });
@@ -321,6 +400,14 @@ router.post('/:sessionId/remove-user', async (req, res) => {
       return res.status(400).json({ error: 'Cannot remove session owner' });
     }
 
+    // Find the user to remove
+    const userToRemove = session.participants.find(p => p.user.username === username);
+    console.log('🔴 REMOVE USER: User to remove', userToRemove ? {
+      username: userToRemove.user.username,
+      role: userToRemove.role,
+      userId: userToRemove.user._id
+    } : 'NOT FOUND');
+
     // Remove user from participants
     session.participants = session.participants.filter(p => 
       p.user.username !== username
@@ -328,16 +415,31 @@ router.post('/:sessionId/remove-user', async (req, res) => {
 
     await session.save();
 
-    res.json({
-      message: `User ${username} removed from session successfully`,
-      participants: session.participants.map(p => ({
+    // Re-populate to get fresh data
+    await session.populate('participants.user', 'username');
+
+    console.log('🔴 REMOVE USER: User removed from session', {
+      remainingParticipants: session.participants.map(p => ({
         username: p.user.username,
         role: p.role,
-        joinedAt: p.joinedAt
+        userId: p.user._id
       }))
     });
+
+    const responseParticipants = session.participants.map(p => ({
+      username: p.user.username,
+      role: p.role,
+      joinedAt: p.joinedAt
+    }));
+
+    console.log('🔴 REMOVE USER: Sending response', { responseParticipants });
+
+    res.json({
+      message: `User ${username} removed from session successfully`,
+      participants: responseParticipants
+    });
   } catch (error) {
-    console.error('Remove user from session error:', error);
+    console.error('🔴 REMOVE USER ERROR:', error);
     res.status(500).json({ error: error.message });
   }
 });

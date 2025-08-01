@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Username Validation Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+        .test-section {
+            background-color: #2d2d30;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #3e3e42;
+        }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+        button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #005a9e;
+        }
+        input {
+            background-color: #3c3c3c;
+            color: white;
+            border: 1px solid #5a5a5a;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Username Validation Test</h1>
+    
+    <div class="test-section">
+        <h2>Current Authentication Status</h2>
+        <div id="auth-status">Checking...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Direct URL Access</h2>
+        <p>Try accessing the IDE with different usernames to test the validation:</p>
+        
+        <div>
+            <label>Session ID:</label>
+            <input type="text" id="sessionId" value="574e6afb-97d2-4557-8eb2-3b14a0a6d9e4" style="width: 300px;">
+        </div>
+        
+        <div>
+            <label>Username:</label>
+            <input type="text" id="username" value="myboiii" placeholder="Enter username">
+        </div>
+        
+        <button onclick="testDirectAccess()">Test Direct Access</button>
+        <button onclick="testWithCorrectUsername()">Test with Correct Username</button>
+        
+        <div id="test-result" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        // Check current authentication status
+        async function checkAuthStatus() {
+            const token = localStorage.getItem('token');
+            const statusDiv = document.getElementById('auth-status');
+            
+            if (!token) {
+                statusDiv.innerHTML = '<span class="error">❌ No authentication token found</span>';
+                return null;
+            }
+
+            try {
+                const response = await fetch('/api/auth/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    statusDiv.innerHTML = '<span class="error">❌ Invalid or expired token</span>';
+                    return null;
+                }
+
+                const result = await response.json();
+                const user = result.user;
+                
+                statusDiv.innerHTML = `
+                    <span class="success">✅ Authenticated as: <strong>${user.username}</strong></span><br>
+                    <span style="color: #ccc;">Email: ${user.email}</span><br>
+                    <span style="color: #ccc;">User ID: ${user.id}</span>
+                `;
+                
+                return user;
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="error">❌ Error checking auth: ${error.message}</span>`;
+                return null;
+            }
+        }
+
+        function testDirectAccess() {
+            const sessionId = document.getElementById('sessionId').value;
+            const username = document.getElementById('username').value;
+            
+            if (!sessionId || !username) {
+                alert('Please enter both session ID and username');
+                return;
+            }
+
+            const url = `/ide?session=${sessionId}&username=${username}`;
+            document.getElementById('test-result').innerHTML = `
+                <div class="warning">🧪 Testing direct access with username: <strong>${username}</strong></div>
+                <div>Opening: <a href="${url}" target="_blank">${url}</a></div>
+                <div style="margin-top: 10px;">
+                    <em>If validation works correctly, you should see a warning dialog asking if you want to continue. The backend will perform final validation.</em>
+                </div>
+            `;
+            
+            // Open in new tab
+            window.open(url, '_blank');
+        }
+
+        async function testWithCorrectUsername() {
+            const user = await checkAuthStatus();
+            if (!user) {
+                alert('Please log in first');
+                return;
+            }
+
+            const sessionId = document.getElementById('sessionId').value;
+            if (!sessionId) {
+                alert('Please enter session ID');
+                return;
+            }
+
+            const url = `/ide?session=${sessionId}&username=${user.username}`;
+            document.getElementById('test-result').innerHTML = `
+                <div class="success">✅ Testing with correct username: <strong>${user.username}</strong></div>
+                <div>Opening: <a href="${url}" target="_blank">${url}</a></div>
+                <div style="margin-top: 10px;">
+                    <em>This should work if you have access to the session.</em>
+                </div>
+            `;
+            
+            // Open in new tab
+            window.open(url, '_blank');
+        }
+
+        // Check auth status on page load
+        checkAuthStatus();
+    </script>
+</body>
+</html>

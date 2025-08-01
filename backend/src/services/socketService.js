@@ -59,8 +59,68 @@ module.exports = (io) => {
           username: socket.user?.username 
         });
         
-        // CRITICAL FIX: Join the socket to the session room for chat functionality
+        // NEW: Session access validation based on email
         const sessionId = data?.sessionId;
+        if (sessionId) {
+          try {
+            // Get session with populated participants and owner
+            const session = await CollaborationSession.findOne({ sessionId })
+              .populate('owner', 'username email')
+              .populate('participants.user', 'username email');
+            
+            if (!session) {
+              console.error('❌ SESSION VALIDATION: Session not found:', sessionId);
+              socket.emit('join-error', { error: 'Session not found' });
+              return;
+            }
+            
+            // Check if user has access to this session
+            const currentUser = socket.user;
+            const isOwner = session.owner._id.toString() === currentUser._id.toString();
+            const isParticipantByUsername = session.participants.some(p => 
+              p.user.username === currentUser.username
+            );
+            
+            // NEW: Email-based validation
+            let emailValidationPassed = false;
+            if (!isOwner && !isParticipantByUsername) {
+              // Check if current user's email matches any participant's email
+              const participantEmails = session.participants.map(p => p.user.email);
+              const ownerEmail = session.owner.email;
+              
+              emailValidationPassed = participantEmails.includes(currentUser.email) || 
+                                     (ownerEmail && ownerEmail === currentUser.email);
+              
+              console.log('🔒 EMAIL VALIDATION:', {
+                userEmail: currentUser.email,
+                participantEmails,
+                ownerEmail,
+                emailValidationPassed
+              });
+            }
+            
+            if (!isOwner && !isParticipantByUsername && !emailValidationPassed) {
+              console.error('❌ SESSION VALIDATION: Access denied for user:', {
+                username: currentUser.username,
+                email: currentUser.email,
+                sessionId
+              });
+              socket.emit('join-error', { 
+                error: 'Access denied. Your email is not authorized to join this session.' 
+              });
+              return;
+            }
+            
+            console.log('✅ SESSION VALIDATION: Access granted for user:', currentUser.username);
+            
+          } catch (error) {
+            console.error('❌ SESSION VALIDATION ERROR:', error);
+            socket.emit('join-error', { error: 'Session validation failed' });
+            return;
+          }
+        }
+        
+        // CRITICAL FIX: Join the socket to the session room for chat functionality
         if (sessionId) {
           socket.join(`session:${sessionId}`);
           console.log('🎯 WORKAROUND: Socket joined session room:', `session:${sessionId}`);
@@ -71,65 +131,295 @@ module.exports = (io) => {
             connection.currentSession = sessionId;
             console.log('🎯 WORKAROUND: Updated connection currentSession:', sessionId);
           }
-        }
-        
-        // Fetch actual session data from database
-        try {
-          const session = await CollaborationSession.findOne({ sessionId })
-            .populate('owner', 'username')
-            .populate('documentId', 'title')
-            .populate('participants.user', 'username');
           
-          if (session) {
-            console.log('🎯 WORKAROUND: Found session in database:', {
-              sessionId: session.sessionId,
-              documentTitle: session.documentId?.title,
-              owner: session.owner?.username,
-              participantCount: session.participants?.length
+          // WORKAROUND: Broadcast user joined to other participants
+          socket.to(`session:${sessionId}`).emit('participant-joined', {
+            user: {
+              id: socket.user._id,
+              username: socket.user.username,
+              isOnline: true
+            },
+            timestamp: new Date()
+          });
+          console.log('🎯 WORKAROUND: Broadcasted participant-joined event');
+        }
+      }
+      
+      // WORKAROUND: Handle get-participants directly in catch-all listener
+      if (eventName === 'get-participants') {
+        console.log('🎯 WORKAROUND: Handling get-participants in catch-all listener');
+        const data = args[0];
+        const sessionId = data?.sessionId;
+        
+        if (sessionId) {
+          try {
+            // Get all active connections for this session
+            const sessionParticipants = [];
+            
+            // First, get session info from database to identify the owner
+            const session = await CollaborationSession.findOne({ sessionId })
+              .populate('owner', 'username _id isOnline lastSeen')
+              .populate('participants.user', 'username _id isOnline lastSeen');
+            
+            console.log('🎯 WORKAROUND: Session found:', !!session);
+            console.log('🎯 WORKAROUND: Session owner:', session?.owner?.username);
+            
+            // Check all active connections to see who's in this session
+            for (const [userId, connection] of activeConnections.entries()) {
+              if (connection.currentSession === sessionId) {
+                sessionParticipants.push({
+                  id: connection.user._id,
+                  username: connection.user.username,
+                  isOnline: true,
+                  status: connection.status || 'online',
+                  lastSeen: connection.lastActivity || new Date(),
+                  lastActivity: connection.lastActivity || new Date(),
+                  joinedAt: new Date(), // Could be tracked more precisely
+                  isOwner: session?.owner?._id?.toString() === connection.user._id?.toString()
+                });
+              }
+            }
+            
+            // IMPORTANT: Also check if session owner is online but not yet in currentSession
+            if (session?.owner) {
+              const ownerId = session.owner._id.toString();
+              const ownerConnection = activeConnections.get(ownerId);
+              
+              // If owner is connected but not in participant list yet, add them
+              const ownerInList = sessionParticipants.find(p => p.id.toString() === ownerId);
+              if (ownerConnection && !ownerInList) {
+                console.log('🎯 WORKAROUND: Adding session owner to participants list');
+                sessionParticipants.push({
+                  id: session.owner._id,
+                  username: session.owner.username,
+                  isOnline: true,
+                  status: ownerConnection.status || 'online',
+                  lastSeen: ownerConnection.lastActivity || new Date(),
+                  lastActivity: ownerConnection.lastActivity || new Date(),
+                  joinedAt: new Date(),
+                  isOwner: true
+                });
+              }
+            }
+            
+            console.log('🎯 WORKAROUND: Found session participants:', sessionParticipants.length);
+            console.log('🎯 WORKAROUND: Participants:', sessionParticipants.map(p => `${p.username} (${p.isOwner ? 'owner' : 'participant'})`));
+            
+            // Emit participants list to requesting socket
+            socket.emit('participants-list', {
+              sessionId,
+              participants: sessionParticipants,
+              timestamp: new Date()
             });
             
-            // Respond with actual session data
-            socket.emit('session-joined', {
-              session: {
-                sessionId: session.sessionId,
-                name: session.documentId?.title || 'Untitled Session',
-                owner: { username: session.owner?.username || 'Unknown' },
-                createdAt: session.createdAt
-              },
-              participants: session.participants || [],
-              terminals: session.terminalSessions || []
+          } catch (error) {
+            console.error('🎯 WORKAROUND: Error getting participants:', error);
+            socket.emit('participants-list', {
+              sessionId,
+              participants: [],
+              timestamp: new Date()
             });
-          } else {
-            console.log('🎯 WORKAROUND: Session not found in database, using fallback');
-            // Fallback response if session not found
+          }
+        }
+      }
+       
+       // WORKAROUND: Handle participant heartbeat for online status tracking
+       if (eventName === 'participant-heartbeat') {
+         console.log('🎯 WORKAROUND: Handling participant-heartbeat in catch-all listener');
+         const data = args[0];
+         const sessionId = data?.sessionId;
+         
+         if (sessionId) {
+           const connection = activeConnections.get(socket.userId);
+           if (connection && connection.currentSession === sessionId) {
+             // Update last activity timestamp
+             connection.lastActivity = new Date();
+             
+             // Broadcast heartbeat to other participants
+             socket.to(`session:${sessionId}`).emit('participant-heartbeat', {
+               user: {
+                 id: socket.user._id,
+                 username: socket.user.username,
+                 isOnline: true
+               },
+               timestamp: new Date()
+             });
+             
+             // Acknowledge heartbeat
+             socket.emit('heartbeat-ack', {
+               sessionId,
+               timestamp: new Date()
+             });
+           }
+         }
+       }
+       
+       // WORKAROUND: Handle participant status update
+       if (eventName === 'update-participant-status') {
+         console.log('🎯 WORKAROUND: Handling update-participant-status in catch-all listener');
+         const data = args[0];
+         const sessionId = data?.sessionId;
+         const status = data?.status; // 'online', 'away', 'busy', etc.
+         
+         if (sessionId && status) {
+           const connection = activeConnections.get(socket.userId);
+           if (connection && connection.currentSession === sessionId) {
+             // Update connection status
+             connection.status = status;
+             connection.lastActivity = new Date();
+             
+             // Broadcast status update to other participants
+             socket.to(`session:${sessionId}`).emit('participant-status-updated', {
+               user: {
+                 id: socket.user._id,
+                 username: socket.user.username,
+                 status: status,
+                 isOnline: true
+               },
+               timestamp: new Date()
+             });
+             
+             console.log('🎯 WORKAROUND: Broadcasted participant status update:', status);
+           }
+         }
+       }
+        
+        // Fetch actual session data from database (only for join-collaboration)
+        if (eventName === 'join-collaboration') {
+          const data = args[0];
+          try {
+            const session = await CollaborationSession.findOne({ sessionId: data?.sessionId })
+              .populate('owner', 'username isOnline lastSeen')
+              .populate('documentId', 'title')
+              .populate('participants.user', 'username isOnline lastSeen');
+            
+            if (session) {
+              console.log('🎯 WORKAROUND: Found session in database:', {
+                sessionId: session.sessionId,
+                documentTitle: session.documentId?.title,
+                owner: session.owner?.username,
+                participantCount: session.participants?.length
+              });
+              
+              // Get ALL participants from database and mark their online status
+              const allParticipants = [];
+              
+              // Add session owner first
+              if (session?.owner) {
+                const ownerId = session.owner._id.toString();
+                const ownerConnection = activeConnections.get(ownerId);
+                
+                // User is online if they have an active WebSocket connection
+                const isOwnerOnline = ownerConnection && ownerConnection.socket && ownerConnection.socket.connected;
+                
+                allParticipants.push({
+                  id: session.owner._id,
+                  username: session.owner.username,
+                  isOnline: isOwnerOnline,
+                  status: ownerConnection?.status || (isOwnerOnline ? 'online' : 'offline'),
+                  lastSeen: ownerConnection?.lastActivity || session.owner.lastSeen || new Date(),
+                  lastActivity: ownerConnection?.lastActivity || session.owner.lastSeen || new Date(),
+                  joinedAt: session.createdAt || new Date(),
+                  isOwner: true,
+                  role: 'owner'
+                });
+              }
+              
+              // Add all other participants from database
+              if (session?.participants) {
+                for (const participant of session.participants) {
+                  const participantId = participant.user._id.toString();
+                  const participantConnection = activeConnections.get(participantId);
+                  
+                  // User is online if they have an active WebSocket connection
+                  const isParticipantOnline = participantConnection && participantConnection.socket && participantConnection.socket.connected;
+                  
+                  // Skip if this is the owner (already added above)
+                  if (participantId === session.owner._id.toString()) {
+                    continue;
+                  }
+                  
+                  allParticipants.push({
+                    id: participant.user._id,
+                    username: participant.user.username,
+                    isOnline: isParticipantOnline,
+                    status: participantConnection?.status || (isParticipantOnline ? 'online' : 'offline'),
+                    lastSeen: participantConnection?.lastActivity || participant.user.lastSeen || participant.joinedAt,
+                    lastActivity: participantConnection?.lastActivity || participant.user.lastSeen || participant.joinedAt,
+                    joinedAt: participant.joinedAt,
+                    isOwner: false,
+                    role: participant.role || 'editor'
+                  });
+                }
+              }
+              
+              console.log('🎯 WORKAROUND: All participants for session-joined:', allParticipants.length);
+              console.log('🎯 WORKAROUND: Participants:', allParticipants.map(p => `${p.username} (${p.isOwner ? 'owner' : 'participant'}) - ${p.isOnline ? 'online' : 'offline'}`));
+              
+              // Respond with actual session data and active participants
+              socket.emit('session-joined', {
+                session: {
+                  sessionId: session.sessionId,
+                  name: session.documentId?.title || 'Untitled Session',
+                  owner: { username: session.owner?.username || 'Unknown' },
+                  createdAt: session.createdAt
+                },
+                participants: allParticipants,
+                terminals: session.terminalSessions || []
+              });
+            } else {
+              console.log('🎯 WORKAROUND: Session not found in database, using fallback');
+              // Fallback response if session not found - include current user as participant
+              const fallbackParticipants = [{
+                id: socket.user._id,
+                username: socket.user.username,
+                isOnline: true,
+                status: 'online',
+                lastSeen: new Date(),
+                lastActivity: new Date(),
+                joinedAt: new Date(),
+                isOwner: true // Assume current user is owner if session not found
+              }];
+              
+              socket.emit('session-joined', {
+                session: {
+                  sessionId: data.sessionId,
+                  name: 'Session Not Found',
+                  owner: { username: socket.user.username },
+                  createdAt: new Date()
+                },
+                participants: fallbackParticipants,
+                terminals: []
+              });
+            }
+          } catch (error) {
+            console.error('🎯 WORKAROUND: Error fetching session data:', error);
+            // Fallback response on error - include current user as participant
+            const errorFallbackParticipants = [{
+              id: socket.user._id,
+              username: socket.user.username,
+              isOnline: true,
+              status: 'online',
+              lastSeen: new Date(),
+              lastActivity: new Date(),
+              joinedAt: new Date(),
+              isOwner: true // Assume current user is owner on error
+            }];
+            
             socket.emit('session-joined', {
               session: {
                 sessionId: data.sessionId,
-                name: 'Session Not Found',
-                owner: { username: 'unknown' },
+                name: 'Error Loading Session',
+                owner: { username: socket.user.username },
                 createdAt: new Date()
               },
-              participants: [],
+              participants: errorFallbackParticipants,
               terminals: []
             });
           }
-        } catch (error) {
-          console.error('🎯 WORKAROUND: Error fetching session data:', error);
-          // Fallback response on error
-          socket.emit('session-joined', {
-            session: {
-              sessionId: data.sessionId,
-              name: 'Error Loading Session',
-              owner: { username: 'unknown' },
-              createdAt: new Date()
-            },
-            participants: [],
-            terminals: []
-          });
+          
+          console.log('🎯 WORKAROUND: Emitted session-joined response');
         }
-        
-        console.log('🎯 WORKAROUND: Emitted session-joined response');
-      }
     });
 
     // Update user online status
@@ -143,7 +433,9 @@ module.exports = (io) => {
       socket,
       user: socket.user,
       currentDocument: null,
-      currentSession: null
+      currentSession: null,
+      lastActivity: new Date(),
+      status: 'online'
     });
 
     // Join user to their personal room
@@ -449,7 +741,7 @@ module.exports = (io) => {
     
         // ALSO emit directly to the requesting socket as a fallback
         socket.emit('terminal-created', eventData);
-        console.log('🐛 Step 15: terminal-created event emitted directly to requesting socket');
+        console.log('� Step 15: terminal-created event emitted directly to requesting socket');
     
         console.log(`✅ Terminal created successfully: ${terminalId} by ${socket.user.username}`);
       } catch (error) {
@@ -809,17 +1101,43 @@ module.exports = (io) => {
             },
             message: `${socket.user.username} left the collaboration`
           });
+          
+          // WORKAROUND: Broadcast participant left for online/offline tracking
+          socket.to(`session:${sessionId}`).emit('participant-left', {
+            user: {
+              id: socket.user._id,
+              username: socket.user.username,
+              isOnline: false
+            },
+            timestamp: new Date()
+          });
+          console.log('🎯 WORKAROUND: Broadcasted participant-left event for session:', sessionId);
         }
       }
 
-      // Update user offline status
-      await User.findByIdAndUpdate(socket.userId, { 
-        isOnline: false, 
-        lastSeen: new Date() 
-      });
-
-      // Remove connection
+      // Remove connection first
       activeConnections.delete(socket.userId);
+      
+      // Only set user offline if they have no other active connections
+      // Check if user has any other active connections
+      let hasOtherConnections = false;
+      for (const [userId, connection] of activeConnections.entries()) {
+        if (userId === socket.userId) {
+          hasOtherConnections = true;
+          break;
+        }
+      }
+      
+      // Only update database status if user has no other connections
+      if (!hasOtherConnections) {
+        await User.findByIdAndUpdate(socket.userId, { 
+          isOnline: false, 
+          lastSeen: new Date() 
+        });
+        console.log('🔍 DEBUG: Set user offline in database:', socket.user?.username);
+      } else {
+        console.log('🔍 DEBUG: User has other connections, keeping online status:', socket.user?.username);
+      }
     });
 
     // Chat functionality
