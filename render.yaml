@@ -1,7 +1,7 @@
 services:
   # Backend Web Service
   - type: web
-    name: collaborative-ide-backend
+    name: co-devs
     env: node
     plan: free
     buildCommand: cd backend && npm install
@@ -26,7 +26,7 @@ services:
       - key: CLIENT_URL
         fromService:
           type: web
-          name: collaborative-ide-frontend
+          name: co-devs-front
           property: url
       # Add Render-specific environment detection
       - key: RENDER_DEPLOYMENT
@@ -38,7 +38,7 @@ services:
 
   # Frontend Static Site
   - type: web
-    name: collaborative-ide-frontend
+    name: co-devs-front
     env: static
     plan: free
     buildCommand: cd frontend/vue-project && npm install && npm run build
@@ -47,7 +47,7 @@ services:
       - key: VITE_API_BASE_URL
         fromService:
           type: web
-          name: collaborative-ide-backend
+          name: co-devs
           property: url
       - key: VITE_NODE_ENV
         value: production
