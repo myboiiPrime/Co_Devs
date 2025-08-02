@@ -62,6 +62,7 @@
               :sessionId="sessionId"
               :socket="socket"
               @file-selected="handleFileSelected"
+              @files-loaded="updateAllFiles"
               @notification="handleNotification"
               class="file-tree"
             />
@@ -108,8 +109,44 @@
               <span class="section-title">SEARCH</span>
             </div>
             <div class="search-content">
-              <input type="text" placeholder="Search files..." class="search-input">
-              <p class="search-placeholder">Search functionality coming soon...</p>
+              <div class="search-input-container">
+                <input 
+                  type="text" 
+                  v-model="searchQuery"
+                  @input="performSearch"
+                  placeholder="Search files..." 
+                  class="search-input"
+                >
+                <div v-if="isSearching" class="search-loading">🔍</div>
+              </div>
+              
+              <div v-if="searchQuery && !isSearching" class="search-info">
+                {{ searchResults.length }} result{{ searchResults.length !== 1 ? 's' : '' }} 
+                for "{{ searchQuery }}"
+              </div>
+              
+              <div v-if="!searchQuery" class="search-placeholder">
+                Type to search for files by name...
+              </div>
+              
+              <div v-if="searchQuery && searchResults.length === 0 && !isSearching" class="search-no-results">
+                No files found matching "{{ searchQuery }}"
+              </div>
+              
+              <div class="search-results">
+                <div 
+                  v-for="file in searchResults" 
+                  :key="file.fullPath"
+                  class="search-result-item"
+                  @click="openSearchResult(file)"
+                >
+                  <div class="search-result-icon">{{ getFileIcon(file) }}</div>
+                  <div class="search-result-info">
+                    <div class="search-result-name">{{ file.name }}</div>
+                    <div class="search-result-path">{{ file.path || '/' }}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -247,6 +284,7 @@
           <keep-alive>
             <CodeEditor 
               v-if="selectedFile && activeTab === 'editor'"
+              ref="codeEditor"
               v-model="fileContent"
               :language="getFileLanguage(selectedFile.name)"
               :documentId="selectedFile.path"
@@ -273,6 +311,7 @@
     <!-- AI Assistant Panel (Right) -->
     <AiAssistant
       v-if="!chatVisible"
+      ref="aiAssistant"
       :selectedCode="selectedCode"
       :hasSelection="hasSelection"
       :currentLanguage="currentLanguage"
@@ -415,7 +454,12 @@ export default {
       currentLanguage: 'javascript',
       otherUsersCursors: [],
       chatVisible: false,
-      currentTime: new Date() // Add current time for real-time updates
+      currentTime: new Date(), // Add current time for real-time updates
+      // Search functionality
+      searchQuery: '',
+      searchResults: [],
+      isSearching: false,
+      allFiles: [] // Cache of all files for searching
     }
   },
   computed: {
@@ -511,14 +555,40 @@ export default {
     },
 
     handleSelectionChange(selection) {
-      this.selectedCode = selection.text || ''
-      this.hasSelection = selection.text && selection.text.length > 0
+      this.selectedCode = selection.selectedText || ''
+      this.hasSelection = selection.hasSelection || false
+      this.currentLanguage = this.getFileLanguage(this.selectedFile?.name || '')
     },
 
     handleInsertCode(code) {
-      // Emit event to CodeEditor to insert code at cursor position
-      this.$refs.codeEditor?.insertCode(code)
+      // Check if we have a file open and the editor is available
+      if (!this.selectedFile) {
+        this.addNotification({
+          type: 'warning',
+          message: 'Please open a file first to insert code'
+        })
+        return
+      }
+
+      // Get reference to the CodeEditor component using ref
+      const codeEditor = this.$refs.codeEditor
+      
+      if (codeEditor && codeEditor.insertCode) {
+        codeEditor.insertCode(code)
+        this.addNotification({
+          type: 'success',
+          message: 'Code inserted successfully!'
+        })
+      } else {
+        console.error('CodeEditor component not found or insertCode method not available')
+        this.addNotification({
+          type: 'error',
+          message: 'Failed to insert code - editor not available'
+        })
+      }
     },
+
+
 
     setupSocketListeners() {
       this.socket.on('session-joined', this.handleSessionJoined)
@@ -719,10 +789,8 @@ export default {
 
     handleFileWriteResult(data) {
       if (data.success) {
-        this.addNotification({
-          type: 'success',
-          message: `File saved: ${data.path}`
-        })
+        // File saved successfully - no notification to avoid spam
+        // The file is automatically saved as the user types
       } else {
         this.addNotification({
           type: 'error',
@@ -771,8 +839,44 @@ export default {
     },
 
     handleAiRequest(request) {
-      // Handle AI requests from the code editor
-      console.log('AI Request:', request)
+      // Handle AI requests from the code editor context menu
+      console.log('AI Request received:', request)
+      
+      // Switch to AI Assistant if currently showing chat
+      if (this.chatVisible) {
+        this.chatVisible = false
+      }
+      
+      // Update selection data
+      this.selectedCode = request.selectedText || ''
+      this.hasSelection = request.hasSelection || false
+      this.currentLanguage = request.language || this.currentLanguage
+      
+      // Wait for next tick to ensure AI Assistant is rendered
+      this.$nextTick(() => {
+        if (this.$refs.aiAssistant) {
+          // Trigger the appropriate AI action based on the request
+          switch (request.action) {
+            case 'explain':
+              this.$refs.aiAssistant.explainSelection()
+              break
+            case 'optimize':
+              this.$refs.aiAssistant.optimizeSelection()
+              break
+            case 'generate':
+              this.$refs.aiAssistant.generateFromPrompt()
+              break
+            default:
+              // For any other action, add the selected code to the AI chat
+              this.$refs.aiAssistant.addCodeToChat(request.selectedText, request.action)
+          }
+        }
+      })
+      
+      this.addNotification({
+        type: 'info',
+        message: `AI ${request.action} request initiated`
+      })
     },
 
     handleError(error) {
@@ -1007,6 +1111,168 @@ export default {
         this.socket.off('cursor-moved')
         this.socket.off('error')
       }
+    },
+
+    // Search functionality methods
+    performSearch() {
+      if (!this.searchQuery.trim()) {
+        this.searchResults = []
+        this.isSearching = false
+        return
+      }
+
+      this.isSearching = true
+      
+      // Debounce search to avoid too many searches while typing
+      clearTimeout(this.searchTimeout)
+      this.searchTimeout = setTimeout(() => {
+        this.executeSearch()
+      }, 300)
+    },
+
+    executeSearch() {
+      const query = this.searchQuery.toLowerCase().trim()
+      
+      if (!query) {
+        this.searchResults = []
+        this.isSearching = false
+        return
+      }
+
+      // Search through all files
+      const results = this.searchInFiles(this.allFiles, query)
+      
+      this.searchResults = results
+      this.isSearching = false
+    },
+
+    searchInFiles(files, query) {
+      const results = []
+      
+      const searchRecursive = (items, currentPath = '') => {
+        for (const item of items) {
+          const itemPath = currentPath ? `${currentPath}/${item.name}` : item.name
+          
+          if (item.type === 'file') {
+            // Search in file name
+            if (item.name.toLowerCase().includes(query)) {
+              results.push({
+                name: item.name,
+                path: currentPath,
+                fullPath: itemPath,
+                type: 'file'
+              })
+            }
+          } else if (item.type === 'directory' && item.children) {
+            // Search in directory name
+            if (item.name.toLowerCase().includes(query)) {
+              results.push({
+                name: item.name,
+                path: currentPath,
+                fullPath: itemPath,
+                type: 'directory'
+              })
+            }
+            // Recursively search in subdirectories
+            searchRecursive(item.children, itemPath)
+          }
+        }
+      }
+      
+      searchRecursive(files)
+      return results
+    },
+
+    openSearchResult(file) {
+      if (file.type === 'file') {
+        // Open the file using the correct method and format
+        this.handleFileSelected({
+          path: file.fullPath,
+          name: file.name
+        })
+        
+        // Switch to file tree view to show the opened file
+        this.setActiveView('files')
+        
+        this.addNotification({
+          type: 'success',
+          message: `Opened ${file.name}`
+        })
+      } else if (file.type === 'directory') {
+        // For directories, just switch to file tree view and show notification
+        this.setActiveView('files')
+        
+        this.addNotification({
+          type: 'info',
+          message: `Directory: ${file.fullPath}`
+        })
+      }
+    },
+
+    getFileIcon(file) {
+      if (file.type === 'directory') {
+        return '📁'
+      }
+      
+      // Get file extension
+      const ext = file.name.split('.').pop()?.toLowerCase()
+      
+      // Return appropriate icon based on file extension
+      switch (ext) {
+        case 'js':
+        case 'jsx':
+          return '📄'
+        case 'ts':
+        case 'tsx':
+          return '📘'
+        case 'vue':
+          return '💚'
+        case 'html':
+          return '🌐'
+        case 'css':
+        case 'scss':
+        case 'sass':
+          return '🎨'
+        case 'json':
+          return '📋'
+        case 'md':
+          return '📝'
+        case 'py':
+          return '🐍'
+        case 'java':
+          return '☕'
+        case 'cpp':
+        case 'c':
+          return '⚙️'
+        case 'php':
+          return '🐘'
+        case 'rb':
+          return '💎'
+        case 'go':
+          return '🐹'
+        case 'rs':
+          return '🦀'
+        case 'xml':
+          return '📄'
+        case 'yml':
+        case 'yaml':
+          return '⚙️'
+        case 'txt':
+          return '📄'
+        case 'png':
+        case 'jpg':
+        case 'jpeg':
+        case 'gif':
+        case 'svg':
+          return '🖼️'
+        default:
+          return '📄'
+      }
+    },
+
+    updateAllFiles(files) {
+      // Update the cached files for search
+      this.allFiles = files || []
     }
   }
 }
@@ -1842,6 +2108,118 @@ export default {
 .remove-user-btn:disabled {
   background: #464647;
   cursor: not-allowed;
+}
+
+/* Search Styles */
+.search-content {
+  padding: 8px 16px;
+}
+
+.search-input-container {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.search-input {
+  width: 100%;
+  background: #3c3c3c;
+  border: 1px solid #464647;
+  color: #cccccc;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #007acc;
+}
+
+.search-loading {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #858585;
+  font-size: 14px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.search-info {
+  color: #858585;
+  font-size: 11px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.search-placeholder {
+  color: #858585;
+  font-size: 12px;
+  text-align: center;
+  padding: 20px 8px;
+  font-style: italic;
+}
+
+.search-no-results {
+  color: #858585;
+  font-size: 12px;
+  text-align: center;
+  padding: 20px 8px;
+}
+
+.search-results {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-bottom: 2px;
+}
+
+.search-result-item:hover {
+  background: #2a2d2e;
+}
+
+.search-result-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.search-result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-result-name {
+  color: #cccccc;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-path {
+  color: #858585;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Responsive Design */

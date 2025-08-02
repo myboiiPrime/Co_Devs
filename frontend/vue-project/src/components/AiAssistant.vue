@@ -1,15 +1,14 @@
 <template>
-  <div class="ai-assistant" :class="{ 'collapsed': isCollapsed }">
-    <div class="ai-header" @click="toggleCollapse">
+  <div class="ai-assistant">
+    <div class="ai-header">
       <div class="ai-title">
         <span class="ai-icon">🤖</span>
         <span>AI Assistant</span>
         <span v-if="isTyping" class="typing-indicator">●●●</span>
       </div>
-      <button class="collapse-btn">{{ isCollapsed ? '▲' : '▼' }}</button>
     </div>
     
-    <div v-if="!isCollapsed" class="ai-content">
+    <div class="ai-content">
       <div class="chat-messages" ref="messagesContainer">
         <div v-for="message in messages" :key="message.id" 
              :class="['message', message.type]">
@@ -18,9 +17,11 @@
             <div v-if="message.code" class="message-code">
               <div class="code-header">
                 <span>{{ message.language }}</span>
-                <button @click="insertCode(message.code)" class="insert-btn">
-                  Insert Code
-                </button>
+                <div class="code-actions">
+                  <button @click="insertCode(message.code)" class="insert-btn">
+                    📥 Insert
+                  </button>
+                </div>
               </div>
               <pre><code>{{ message.code }}</code></pre>
             </div>
@@ -39,6 +40,9 @@
           </button>
           <button @click="generateFromPrompt" class="quick-btn">
             🎯 Generate
+          </button>
+          <button @click="addSelectionToChat" class="quick-btn" :disabled="!hasSelection">
+            📋 Add Code
           </button>
         </div>
         <div class="input-area">
@@ -86,7 +90,6 @@ const props = defineProps({
 
 const emit = defineEmits(['insert-code'])
 
-const isCollapsed = ref(false)
 const isTyping = ref(false)
 const currentMessage = ref('')
 const messages = ref([
@@ -100,10 +103,6 @@ const messages = ref([
 const messagesContainer = ref(null)
 
 let messageIdCounter = 2
-
-const toggleCollapse = () => {
-  isCollapsed.value = !isCollapsed.value
-}
 
 const addMessage = (type, text, code = null, language = null) => {
   messages.value.push({
@@ -125,6 +124,38 @@ const scrollToBottom = () => {
   })
 }
 
+// Helper function to extract and merge all code blocks from a response
+const extractAndMergeCodeBlocks = (text) => {
+  // Split text by triple backticks to find code blocks
+  const parts = text.split('```')
+  const codeBlocks = []
+  
+  // Every odd-indexed part (1, 3, 5, etc.) is a code block
+  for (let i = 1; i < parts.length; i += 2) {
+    let codeContent = parts[i]
+    
+    // Remove language identifier from the first line if present
+    const lines = codeContent.split('\n')
+    if (lines.length > 0 && lines[0].trim().match(/^[a-zA-Z]+$/)) {
+      // First line is likely a language identifier, remove it
+      codeContent = lines.slice(1).join('\n')
+    }
+    
+    // Trim whitespace and add to collection if not empty
+    const trimmedCode = codeContent.trim()
+    if (trimmedCode) {
+      codeBlocks.push(trimmedCode)
+    }
+  }
+  
+  // If we found code blocks, merge them with double newlines
+  if (codeBlocks.length > 0) {
+    return codeBlocks.join('\n\n')
+  }
+  
+  return null
+}
+
 const sendMessage = async () => {
   if (!currentMessage.value.trim() || isTyping.value) return
   
@@ -137,20 +168,12 @@ const sendMessage = async () => {
   try {
     const response = await aiService.generateCode(userMessage, props.currentLanguage)
     
-    // Check if response contains code blocks
-    const hasCodeBlock = response.includes('```')
+    // Extract and merge all code blocks from the response
+    const mergedCode = extractAndMergeCodeBlocks(response)
     
-    if (hasCodeBlock) {
-      // Extract code from ``` blocks for the code parameter
-      const codeBlockMatch = response.match(/```(?:\w+)?\s*([\s\S]*?)```/)
-      if (codeBlockMatch) {
-        const codeContent = codeBlockMatch[1].trim()
-        // Include full response as text AND extracted code as separate parameter
-        addMessage('assistant', response, codeContent, props.currentLanguage)
-      } else {
-        // Fallback if ``` format is malformed
-        addMessage('assistant', response)
-      }
+    if (mergedCode) {
+      // Include full response as text AND merged code as separate parameter
+      addMessage('assistant', response, mergedCode, props.currentLanguage)
     } else {
       // No code blocks, treat as regular text
       addMessage('assistant', response)
@@ -169,7 +192,7 @@ const addNewLine = () => {
 const explainSelection = async () => {
   if (!props.hasSelection) return
   
-  addMessage('user', `Explain this code: ${props.selectedCode}`)
+  addMessage('user', `Explain this code:\n\`\`\`${props.currentLanguage}\n${props.selectedCode}\n\`\`\``)
   isTyping.value = true
   
   try {
@@ -185,12 +208,20 @@ const explainSelection = async () => {
 const optimizeSelection = async () => {
   if (!props.hasSelection) return
   
-  addMessage('user', `Optimize this code: ${props.selectedCode}`)
+  addMessage('user', `Optimize this code:\n\`\`\`${props.currentLanguage}\n${props.selectedCode}\n\`\`\``)
   isTyping.value = true
   
   try {
     const optimization = await aiService.optimizeCode(props.selectedCode, props.currentLanguage)
-    addMessage('assistant', optimization)
+    
+    // Extract and merge all code blocks from the response
+    const mergedCode = extractAndMergeCodeBlocks(optimization)
+    
+    if (mergedCode) {
+      addMessage('assistant', optimization, mergedCode, props.currentLanguage)
+    } else {
+      addMessage('assistant', optimization)
+    }
   } catch (error) {
     addMessage('assistant', `Error optimizing code: ${error.message}`)
   } finally {
@@ -203,14 +234,44 @@ const generateFromPrompt = () => {
   document.querySelector('.message-input').focus()
 }
 
+const addSelectionToChat = () => {
+  if (!props.hasSelection) return
+  
+  currentMessage.value = `Here's my code:\n\`\`\`${props.currentLanguage}\n${props.selectedCode}\n\`\`\`\n\nCan you help me with: `
+  document.querySelector('.message-input').focus()
+}
+
+const addCodeToChat = (code, action = 'analyze') => {
+  if (!code) return
+  
+  const actionPrompts = {
+    explain: 'Please explain this code:',
+    optimize: 'Please optimize this code:',
+    generate: 'Please generate similar code:',
+    analyze: 'Please analyze this code:'
+  }
+  
+  const prompt = actionPrompts[action] || actionPrompts.analyze
+  currentMessage.value = `${prompt}\n\`\`\`${props.currentLanguage}\n${code}\n\`\`\`\n\n`
+  document.querySelector('.message-input').focus()
+}
+
 const insertCode = (code) => {
   emit('insert-code', code)
-  addMessage('assistant', 'Code inserted into editor!')
 }
 
 const formatTime = (timestamp) => {
   return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
+
+// Expose methods for parent components
+defineExpose({
+  explainSelection,
+  optimizeSelection,
+  generateFromPrompt,
+  addCodeToChat,
+  addSelectionToChat
+})
 
 // Auto-scroll when new messages are added
 watch(() => messages.value.length, () => {
@@ -232,19 +293,14 @@ watch(() => messages.value.length, () => {
   color: #cccccc;
 }
 
-.ai-assistant.collapsed {
-  width: 50px;
-}
-
 .ai-header {
   height: 35px;
   padding: 0 16px;
   background: #2d2d2d;
   border-bottom: 1px solid #3e3e3e;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  cursor: pointer;
   user-select: none;
 }
 
@@ -271,26 +327,6 @@ watch(() => messages.value.length, () => {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
-}
-
-.collapse-btn {
-  background: none;
-  border: none;
-  font-size: 12px;
-  color: #858585;
-  cursor: pointer;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  transition: all 0.2s ease;
-}
-
-.collapse-btn:hover {
-  background: #3e3e3e;
-  color: #cccccc;
 }
 
 .ai-content {
@@ -429,6 +465,11 @@ watch(() => messages.value.length, () => {
   border-bottom: 1px solid #3e3e3e;
 }
 
+.code-actions {
+  display: flex;
+  gap: 4px;
+}
+
 .insert-btn {
   background: #007acc;
   color: white;
@@ -442,6 +483,23 @@ watch(() => messages.value.length, () => {
 
 .insert-btn:hover {
   background: #005a9e;
+}
+
+.cursor-btn {
+  background: #28a745;
+}
+
+.cursor-btn:hover {
+  background: #218838;
+}
+
+.replace-btn {
+  background: #ffc107;
+  color: #212529;
+}
+
+.replace-btn:hover {
+  background: #e0a800;
 }
 
 .message-code pre {

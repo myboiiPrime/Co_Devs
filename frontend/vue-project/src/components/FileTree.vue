@@ -132,6 +132,9 @@ export default {
       this.loading = false
       if (data.path === this.currentPath) {
         this.files = data.files || []
+        
+        // Emit files data for search functionality
+        this.$emit('files-loaded', this.files)
       }
     },
 

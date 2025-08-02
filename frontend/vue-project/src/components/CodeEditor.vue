@@ -196,11 +196,13 @@ const formatCode = () => {
 
 const askAiAboutSelection = (action) => {
   // This will be handled by the parent component
+  // For context menu actions, we want to add code to chat like "Add Code" button
   emit('ai-request', {
-    action,
+    action: 'add-code', // Always use 'add-code' action for context menu
     selectedText: selectedText.value,
     hasSelection: hasSelection.value,
-    language: selectedLanguage.value
+    language: selectedLanguage.value,
+    contextAction: action // Keep track of the original action for prompt customization
   })
 }
 
@@ -215,6 +217,28 @@ const insertCode = (code) => {
   }
 }
 
+const insertAtCursor = (code) => {
+  if (editor) {
+    const position = editor.getPosition()
+    editor.executeEdits('ai-insert-cursor', [{
+      range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+      text: code
+    }])
+    editor.focus()
+  }
+}
+
+const replaceSelection = (code) => {
+  if (editor && hasSelection.value) {
+    const selection = editor.getSelection()
+    editor.executeEdits('ai-replace', [{
+      range: selection,
+      text: code
+    }])
+    editor.focus()
+  }
+}
+
 // Expose methods for parent components
 defineExpose({
   getEditor: () => editor,
@@ -222,6 +246,8 @@ defineExpose({
   getValue: () => editor?.getValue() || '',
   focus: () => editor?.focus(),
   insertCode,
+  insertAtCursor,
+  replaceSelection,
   getSelectedText: () => selectedText.value,
   hasSelection: () => hasSelection.value
 })
