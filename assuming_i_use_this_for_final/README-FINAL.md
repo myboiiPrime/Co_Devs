@@ -20,7 +20,7 @@ This is the vision I have for the final project of the collaborative IDE with in
 
 ## 🏗️ Architecture
 Final Project Structure:
-├── backend/                 # Node.js Express server
+├── server/                  # Node.js Express server
 │   ├── src/
 │   │   ├── services/
 │   │   │   ├── socketService.js      # WebSocket handling
@@ -30,7 +30,7 @@ Final Project Structure:
 │   │   ├── routes/          # API routes
 │   │   └── server.js        # Main server file
 │   └── package.json
-├── frontend/                # Vue.js application
+├── client/                  # Vue.js application
 │   └── vue-project/
 │       ├── src/
 │       │   ├── components/  # Vue components
@@ -51,29 +51,29 @@ Final Project Structure:
 
 ### 2. Install Dependencies
 ```bash
-# Backend
-cd backend
+# Server
+cd server
 npm install
 
-# Frontend
-cd frontend/vue-project
+# Client
+cd client/vue-project
 npm install
 ```
 
 ### 3. Start the Application
 ```bash
-# Terminal 1 - Backend
-cd backend
+# Terminal 1 - Server
+cd server
 npm start
 
-# Terminal 2 - Frontend
-cd frontend/vue-project
+# Terminal 2 - Client
+cd client/vue-project
 npm run dev
 ```
 
 ### 4. Access the Application
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3001
+- Client: http://localhost:5173
+- Server API: http://localhost:3001
 
 ## 🔧 Code Execution Setup
 
@@ -174,15 +174,15 @@ newlanguage: {
 3. **Test Execution** with sample code
 
 ### Debugging
-- Check browser console for frontend errors
-- Monitor backend logs for execution issues
-- Use the debug scripts in `backend/debug/`
+- Check browser console for client errors
+- Monitor server logs for execution issues
+- Use the debug scripts in `server/debug/`
 
 ## 📦 Deployment
 
 ### Local Development
 - Use the provided setup scripts
-- Run backend and frontend separately
+- Run server and client separately
 - Access via localhost
 
 ### Production Deployment

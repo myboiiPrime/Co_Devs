@@ -1,6 +1,6 @@
 # Deployment Guide for Collaborative IDE
 
-This guide will help you deploy your collaborative IDE application to Render with separate backend and frontend services.
+This guide will help you deploy your collaborative IDE application to Render with separate server and client services.
 
 ## Prerequisites
 
@@ -21,23 +21,23 @@ This guide will help you deploy your collaborative IDE application to Render wit
    - Render will automatically detect the `render.yaml` file
 
 3. **Set Environment Variables:**
-   - In the backend service settings, manually add:
+   - In the server service settings, manually add:
      - `MONGODB_URI`: Your MongoDB Atlas connection string
      - `JWT_SECRET`: A secure random string for JWT signing
 
 4. **Deploy:**
    - Render will automatically deploy both services
-   - The frontend will automatically get the backend URL
-   - The backend will automatically get the frontend URL for CORS
+   - The client will automatically get the server URL
+   - The server will automatically get the client URL for CORS
 
 ### Option 2: Manual Deployment
 
-#### Backend Deployment
+#### Server Deployment
 
 1. **Create Web Service:**
    - Service Type: Web Service
-   - Build Command: `cd backend && npm install`
-   - Start Command: `cd backend && npm start`
+   - Build Command: `cd server && npm install`
+   - Start Command: `cd server && npm start`
    - Environment: Node
 
 2. **Environment Variables:**
@@ -47,29 +47,29 @@ This guide will help you deploy your collaborative IDE application to Render wit
    MONGODB_URI=<your-mongodb-connection-string>
    JWT_SECRET=<your-jwt-secret>
    JWT_EXPIRE=7d
-   CLIENT_URL=<your-frontend-url-after-deployment>
+   CLIENT_URL=<your-client-url-after-deployment>
    ```
 
-#### Frontend Deployment
+#### Client Deployment
 
 1. **Create Static Site:**
-   - Build Command: `cd frontend/vue-project && npm install && npm run build`
-   - Publish Directory: `frontend/vue-project/dist`
+   - Build Command: `cd client/vue-project && npm install && npm run build`
+   - Publish Directory: `client/vue-project/dist`
 
 2. **Environment Variables:**
    ```
-   VITE_API_BASE_URL=<your-backend-url>
+   VITE_API_BASE_URL=<your-server-url>
    VITE_NODE_ENV=production
    ```
 
 ## Configuration Files Created
 
-### Frontend Configuration
+### Client Configuration
 - `.env` - Development environment variables
 - `.env.production` - Production environment variables
 - `src/config/api.js` - API configuration with environment-based URLs
 
-### Backend Configuration
+### Server Configuration
 - `.env` - Development environment variables
 - `.env.production` - Production environment variables
 - Updated `server.js` with dynamic CORS configuration
@@ -84,7 +84,7 @@ This guide will help you deploy your collaborative IDE application to Render wit
    - Keep sensitive variables (MONGODB_URI, JWT_SECRET) secure
 
 2. **CORS Configuration:**
-   - The backend now dynamically allows the frontend URL based on CLIENT_URL environment variable
+   - The server now dynamically allows the client URL based on CLIENT_URL environment variable
    - Both localhost and production URLs are supported
 
 3. **API Endpoints:**
@@ -97,14 +97,14 @@ This guide will help you deploy your collaborative IDE application to Render wit
 
 ## Testing Deployment
 
-1. **Backend Health Check:**
+1. **Server Health Check:**
    ```
-   GET https://your-backend-url.onrender.com/api/health
+   GET https://your-server-url.onrender.com/api/health
    ```
 
-2. **Frontend Access:**
+2. **Client Access:**
    ```
-   https://your-frontend-url.onrender.com
+   https://your-client-url.onrender.com
    ```
 
 3. **WebSocket Connection:**
@@ -116,12 +116,12 @@ This guide will help you deploy your collaborative IDE application to Render wit
 ### Common Issues:
 
 1. **CORS Errors:**
-   - Verify CLIENT_URL in backend environment variables
-   - Check that frontend URL is correctly set
+   - Verify CLIENT_URL in server environment variables
+   - Check that client URL is correctly set
 
 2. **API Connection Errors:**
-   - Verify VITE_API_BASE_URL in frontend environment variables
-   - Ensure backend service is running
+   - Verify VITE_API_BASE_URL in client environment variables
+   - Ensure server service is running
 
 3. **Database Connection:**
    - Check MongoDB Atlas connection string
@@ -134,8 +134,8 @@ This guide will help you deploy your collaborative IDE application to Render wit
 ## Production URLs Structure
 
 After deployment, your URLs will look like:
-- Backend: `https://collaborative-ide-backend.onrender.com`
-- Frontend: `https://collaborative-ide-frontend.onrender.com`
+- Server: `https://collaborative-ide-server.onrender.com`
+- Client: `https://collaborative-ide-client.onrender.com`
 
 Update your environment files with these actual URLs once deployed.
 

@@ -6,7 +6,7 @@ Your collaborative IDE application is now fully prepared for Render deployment!
 
 ## 📋 **What's Been Configured**
 
-### ✅ **Backend Service**
+### ✅ **Server Service**
 - **Environment Variables**: Properly configured with fallbacks
 - **CORS Configuration**: 🆕 **Enhanced flexible CORS** - supports any deployment platform
   - Environment-based origins (development vs production)
@@ -19,7 +19,7 @@ Your collaborative IDE application is now fully prepared for Render deployment!
 - **Terminal Service**: Fixed `destroyTerminal` method issue
 - **Node.js Version**: Specified in package.json (>=18.0.0)
 
-### ✅ **Frontend Service**
+### ✅ **Client Service**
 - **API Configuration**: Uses `VITE_API_BASE_URL` environment variable
 - **Production Build**: Successfully tested and working
 - **Environment Files**: Both development and production configured
@@ -29,14 +29,14 @@ Your collaborative IDE application is now fully prepared for Render deployment!
 
 ### ✅ **Deployment Configuration**
 - **render.yaml**: Complete configuration for both services
-- **Environment Linking**: Frontend automatically gets backend URL
+- **Environment Linking**: Client automatically gets server URL
 - **Security**: Sensitive variables marked for manual configuration
-- **Health Checks**: Backend service health monitoring enabled
+- **Health Checks**: Server service health monitoring enabled
 - **Scaling**: Single instance to prevent WebSocket issues
 
 ## 🔧 **Manual Steps Required in Render Dashboard**
 
-After deployment, set these environment variables manually in the **backend service**:
+After deployment, set these environment variables manually in the **server service**:
 
 ```
 MONGODB_URI=mongodb+srv://thangtobo4058:8wJtcfgD0W6i7fGS@userbase.ttbcnq1.mongodb.net/collaborative-editor?retryWrites=true&w=majority&appName=userbase
@@ -54,12 +54,12 @@ GEMINI_API_KEY=AIzaSyA7A85NaSkdylswgsJ3n0HvLDJ5HuvilpU
 
 ## 🧪 **Testing Checklist**
 
-### Backend Health Check
+### Server Health Check
 ```
-GET https://your-backend-url.onrender.com/api/health
+GET https://your-server-url.onrender.com/api/health
 ```
 
-### Frontend Features to Test
+### Client Features to Test
 - [ ] User registration/login
 - [ ] Session creation and joining
 - [ ] Real-time collaboration (typing, cursor movement)
@@ -70,16 +70,16 @@ GET https://your-backend-url.onrender.com/api/health
 ## 📁 **Key Files Created/Updated**
 
 - ✅ `render.yaml` - Deployment configuration
-- ✅ `frontend/vue-project/.env` - Development environment
-- ✅ `frontend/vue-project/.env.production` - Production environment
-- ✅ `backend/.env` - Backend environment variables
+- ✅ `client/vue-project/.env` - Development environment
+- ✅ `client/vue-project/.env.production` - Production environment
+- ✅ `server/.env` - Server environment variables
 - ✅ `DEPLOYMENT_CHECKLIST.md` - Comprehensive deployment guide
 - ✅ `test-production-build.bat` - Local build testing script
 - ✅ Updated package.json files with Node.js version requirements
 
 ## 🔍 **Production Build Test Results**
 
-✅ **Frontend build completed successfully**
+✅ **Client build completed successfully**
 - Build time: 4.31s
 - Output size: ~800KB total (gzipped)
 - Monaco Editor properly chunked
@@ -100,7 +100,3 @@ GET https://your-backend-url.onrender.com/api/health
 - `render.yaml` - Service configuration
 - Render documentation: https://render.com/docs
 - GitHub repository with all code ready for deployment
-
----
-
-**🎉 Your collaborative IDE is ready for production deployment on Render! 🎉**

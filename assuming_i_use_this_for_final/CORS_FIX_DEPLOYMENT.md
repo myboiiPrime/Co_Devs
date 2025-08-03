@@ -1,16 +1,16 @@
 # 🔧 CORS Fix Deployment Guide
 
 ## 🚨 **Issue Identified**
-Your frontend at `https://co-devs-front.onrender.com` is being blocked by CORS when trying to access the backend at `https://co-devs.onrender.com`.
+Your client at `https://co-devs-front.onrender.com` is being blocked by CORS when trying to access the server at `https://co-devs.onrender.com`.
 
 ## ✅ **Fixes Applied**
 
-### 1. **Updated Backend Environment**
-- Fixed `CLIENT_URL` in `.env.production` to match actual frontend URL
+### 1. **Updated Server Environment**
+- Fixed `CLIENT_URL` in `.env.production` to match actual client URL
 - Enhanced CORS configuration with proper headers and methods
 
-### 2. **Updated Frontend Environment**
-- Set correct `VITE_API_BASE_URL` to point to backend
+### 2. **Updated Client Environment**
+- Set correct `VITE_API_BASE_URL` to point to server
 
 ### 3. **Updated render.yaml**
 - Service names now match your actual deployment
@@ -21,13 +21,13 @@ Your frontend at `https://co-devs-front.onrender.com` is being blocked by CORS w
 ### **Option 1: Quick Fix (Recommended)**
 Update the environment variable in Render dashboard:
 
-1. Go to your **backend service** (`co-devs`) in Render dashboard
+1. Go to your **server service** (`co-devs`) in Render dashboard
 2. Navigate to **Environment** tab
 3. Update or add:
    ```
    CLIENT_URL=https://co-devs-front.onrender.com
    ```
-4. **Deploy** the backend service
+4. **Deploy** the server service
 
 ### **Option 2: Full Redeploy**
 1. **Commit and push** all changes to GitHub
@@ -38,7 +38,7 @@ Update the environment variable in Render dashboard:
 
 After deployment, test these endpoints:
 
-### **Backend Health Check**
+### **Server Health Check**
 ```
 GET https://co-devs.onrender.com/api/health
 ```
@@ -54,7 +54,7 @@ fetch('https://co-devs.onrender.com/api/health')
 
 ## 🔍 **Environment Variables Summary**
 
-### **Backend (`co-devs`)**
+### **Server (`co-devs`)**
 ```bash
 NODE_ENV=production
 PORT=5000
@@ -68,7 +68,7 @@ MAX_TERMINALS_PER_SESSION=3
 TERMINAL_TIMEOUT_MS=1800000
 ```
 
-### **Frontend (`co-devs-front`)**
+### **Client (`co-devs-front`)**
 ```bash
 VITE_API_BASE_URL=https://co-devs.onrender.com
 VITE_NODE_ENV=production
@@ -78,7 +78,7 @@ VITE_NODE_ENV=production
 
 After applying these fixes:
 - ✅ No more CORS errors
-- ✅ Frontend can communicate with backend
+- ✅ Client can communicate with server
 - ✅ API calls work properly
 - ✅ Real-time features function correctly
 
@@ -90,5 +90,3 @@ After applying these fixes:
 4. **Check browser network tab** for detailed error messages
 
 ---
-
-**The CORS configuration has been fixed and is ready for deployment! 🎉**

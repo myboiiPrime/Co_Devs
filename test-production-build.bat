@@ -2,30 +2,30 @@
 echo 🧪 Testing Production Build Locally
 echo.
 
-echo 📦 Installing backend dependencies...
-cd backend
+echo 📦 Installing server dependencies...
+cd server
 call npm install
 if %errorlevel% neq 0 (
-    echo ❌ Backend npm install failed
+    echo ❌ Server npm install failed
     pause
     exit /b 1
 )
 
 echo.
-echo 📦 Installing frontend dependencies...
-cd ..\frontend\vue-project
+echo 📦 Installing client dependencies...
+cd ..\client\vue-project
 call npm install
 if %errorlevel% neq 0 (
-    echo ❌ Frontend npm install failed
+    echo ❌ Client npm install failed
     pause
     exit /b 1
 )
 
 echo.
-echo 🏗️ Building frontend for production...
+echo 🏗️ Building client for production...
 call npm run build
 if %errorlevel% neq 0 (
-    echo ❌ Frontend build failed
+    echo ❌ Client build failed
     pause
     exit /b 1
 )
@@ -33,7 +33,7 @@ if %errorlevel% neq 0 (
 echo.
 echo ✅ Production build test completed successfully!
 echo.
-echo 📁 Frontend build output is in: frontend\vue-project\dist
+echo 📁 Client build output is in: client\vue-project\dist
 echo 🚀 Ready for Render deployment!
 echo.
 pause

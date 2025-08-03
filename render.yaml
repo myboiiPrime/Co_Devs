@@ -4,8 +4,8 @@ services:
     name: co-devs
     env: node
     plan: free
-    buildCommand: cd backend && npm install
-    startCommand: cd backend && npm start
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
     # Force single instance to prevent WebSocket room splitting
     scaling:
       minInstances: 1
@@ -41,8 +41,8 @@ services:
     name: co-devs-front
     env: static
     plan: free
-    buildCommand: cd frontend/vue-project && npm install && npm run build
-    staticPublishPath: frontend/vue-project/dist
+    buildCommand: cd client/vue-project && npm install && npm run build
+    staticPublishPath: client/vue-project/dist
     envVars:
       - key: VITE_API_BASE_URL
         fromService:
